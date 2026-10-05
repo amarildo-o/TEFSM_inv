@@ -24,14 +24,15 @@ Estas figuras provienen de una simulación numérica 3D; el programa solo grafic
 
 ## Figura 13 (pseudo-sección normalizada de ΔV)
 
-Formato del equipo (`L, N, freq01…freqNN`, en mV; ver `ejemplos/150M_L93.csv`) o formato largo `y_m, f_hz, dv_mv [, rho_ohm_m]`:
+Formato del equipo (`L, N, freq01…freqNN`, en mV; ver `ejemplos/150M_L89.csv`) o formato largo `y_m, f_hz, dv_mv [, rho_ohm_m]`:
 
 ```
-python tefsm_figuras.py pseudo ejemplos/150M_L93.csv --freqs frecuencias.txt --dx 1 --rho 220
+python tefsm_figuras.py pseudo ejemplos/150M_L89.csv
+python tefsm_figuras.py pseudo ejemplos/300M_L19.csv      # sondeo a 300 m, 40 canales
 ```
 
 - K = log10(ΔV/ΔVmin) (ec. 13) y hs = c·503·√(ρ/f) (ec. 12).
-- `L93` es el registro de memoria del equipo; `150M` es el rango de profundidad configurado (100, 150 o 300 m). Se toma del nombre del archivo o de `--prof`, y con él se calibra c para que la frecuencia más baja llegue a esa profundidad. Con `--c` se fija manualmente.
+- En el nombre `150M_L89.csv`, `L89` es el registro de memoria del equipo y `150M` el rango de profundidad configurado (100, 150 o 300 m). El rango se toma del nombre del archivo o de `--prof`; el número de canales (36, 40…) se detecta de las columnas `freqNN`.
 - `--freqs`: frecuencias (Hz) de cada columna `freqNN`. Si se omite se asumen log-espaciadas entre 5000 y 12 Hz (`--fmax`, `--fmin`), con `freq01` la más alta (más somera) y `freqNN` la más baja (más profunda).
 - `--umbral` (def. 0.1 mV): las lecturas ≤ umbral se consideran ruido/canal muerto y se dejan en ΔVmin (K = 0, azul), como en la pantalla del equipo.
 - `--escala-h`: `lineal` (def. con datos del equipo) calcula la profundidad como `prof · canal / n` (freq01 somero … freqNN profundo, igual que el Profile del equipo); `ec12` usa hs = c·503·√(ρ/f) del artículo.
@@ -45,10 +46,10 @@ Basadas en las figuras 3 y 4 de Gomo y Ngobe, *Telluric Electric Frequency Selec
 
 ```
 # Fig. 3: EPD (mV) contra profundidad en una estacion, con litologia y venas de agua opcionales
-python tefsm_figuras.py vertical ejemplos/150M_L93.csv --punto 85 --agua 25,45 --litologia ejemplos/litologia_ejemplo.csv
+python tefsm_figuras.py vertical ejemplos/150M_L89.csv --punto 85 --agua 25,45 --litologia ejemplos/litologia_ejemplo.csv
 
 # Fig. 4: EPD (escala log) contra distancia horizontal, una curva por profundidad
-python tefsm_figuras.py horizontal ejemplos/150M_L93.csv --zona 9,15
+python tefsm_figuras.py horizontal ejemplos/150M_L89.csv --zona 9,15
 ```
 
 - `vertical`: `--punto N` (uno o varios N separados por coma), `--agua` (profundidades de venas de agua), `--litologia` (CSV `tope_m,base_m,nombre`; `ejemplos/litologia_ejemplo.csv` es un ejemplo inventado, no es la litología del sitio).
@@ -62,7 +63,7 @@ En `ejemplos/figuras/` están los PNG generados con los CSV de `ejemplos/`
 
 - `fig2.png`, `fig4.png`, `fig6.png`: módulo de Ey (curvas y pseudo-sección; fig6 incluye la fase).
 - `fig13_sintetico.png`: pseudo-sección normalizada con datos sintéticos.
-- `fig3_perfil_vertical.png` y `fig4_perfil_horizontal.png`: figuras 3 y 4 de Gomo y Ngobe con los datos del equipo.
-- `fig13_150M_L93.png`: pseudo-sección con los datos reales del equipo (`150M_L93.csv`; 18 puntos cada 1.5 m, profundidad lineal 0–150 m).
+- `fig3_vertical_*.png` y `fig4_horizontal_*.png`: figuras 3 y 4 de Gomo y Ngobe con los datos del equipo.
+- `fig13_150M_L89.png` y `fig13_300M_L19.png`: pseudo-sección con los datos reales del equipo (sondeos a 150 m y 300 m; 18 puntos cada 1.5 m, profundidad lineal con el canal).
 
 Para regenerarlas: `python tefsm_figuras.py modulo ejemplos/datos_fig2.csv --nombre fig2 --salida ejemplos/figuras`

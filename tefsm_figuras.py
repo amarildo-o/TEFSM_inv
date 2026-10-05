@@ -17,8 +17,8 @@ USO
   python tefsm_figuras.py pseudo  datos_L8.csv --nombre fig13b --zk 23 --c 0.1 --rho 220
 
   # Figuras 3 y 4 de Gomo y Ngobe (perfil vertical y horizontal de la EPD, datos del equipo)
-  python tefsm_figuras.py vertical   150M_L93.csv --punto 85 --agua 25,45
-  python tefsm_figuras.py horizontal 150M_L93.csv --zona 10,18
+  python tefsm_figuras.py vertical   150M_L89.csv --punto 85 --agua 25,45
+  python tefsm_figuras.py horizontal 150M_L89.csv --zona 10,18
 
   # Archivos de ejemplo sinteticos para probar el formato
   python tefsm_figuras.py demo --salida ejemplos
@@ -221,7 +221,7 @@ def figura_pseudo(args):
 
     dvmin = df["dv_mv"].min()  # minimo de todo el perfil
     df["K"] = np.log10(df["dv_mv"] / dvmin)
-    # Rango de profundidad del equipo (100/150/300 m): --prof, o se toma del nombre ("150M_L93.csv")
+    # Rango de profundidad del equipo (100/150/300 m): --prof, o se toma del nombre ("150M_L89.csv")
     prof_eq = args.prof
     if prof_eq is None:
         m = re.search(r"(\d+)\s*m", os.path.basename(args.archivo), re.I)
@@ -253,9 +253,10 @@ def figura_pseudo(args):
             K[:, j] = np.interp(prof, s["hs"], s["K"], right=np.nan)
 
     fig, ax = plt.subplots(figsize=(7.5, 6))
-    niveles = np.linspace(0, max(2.0, np.nanmax(K)), 21)
+    tope = max(2.0, np.ceil(np.nanmax(K) * 10) / 10)
+    niveles = np.round(np.arange(0, tope + 1e-9, 0.1), 1)
     cf = ax.contourf(ys, -prof, K, levels=niveles, cmap=CMAP_K, extend="neither")
-    cs = ax.contour(ys, -prof, K, levels=np.arange(0.1, 2.0, 0.1), colors="k", linewidths=0.4)
+    cs = ax.contour(ys, -prof, K, levels=niveles[1:-1], colors="k", linewidths=0.4)
     ax.clabel(cs, fmt="%.1f", fontsize=6)
     if args.zk is not None:
         ax.axvline(args.zk, color="red", lw=1.5)
