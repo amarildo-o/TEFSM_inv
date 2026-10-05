@@ -4,18 +4,16 @@ TEFSM_inv: figuras a partir de lecturas de mV del equipo TEFSM (selector de frec
 
 Basado en:
   Yang et al., Water 2025, 17, 3314 (figuras 2, 4, 6 y 13), y
-  Gomo y Ngobe, Aquifers - Advances in Hydrogeology, IntechOpen (figuras 3 y 4).
+  Gomo y Ngobe, Aquifers - Advances in Hydrogeology, IntechOpen (figura 4).
 
 Comandos (datos del equipo: columnas L, N, freq01..freqNN en mV; ver datos/):
   pseudo      Figura 13: pseudo-seccion normalizada log10(dV/dVmin) vs profundidad
-  vertical    Fig. 3 (Gomo y Ngobe): EPD vs profundidad en una estacion
   horizontal  Fig. 4 (Gomo y Ngobe): EPD (log) vs distancia, una curva por profundidad
   inversion   SP Inversion y Modelo de resistividad (aproximado), figuras independientes
   modulo      Figuras 2, 4 y 6 de Yang et al.: |Ey| y fase (formato largo y_m, f_hz, ey_mv[, fase_deg])
 
 Ejemplos:
   python tefsm_figuras.py pseudo     datos/150M_L89.csv
-  python tefsm_figuras.py vertical   datos/150M_L89.csv --punto 85
   python tefsm_figuras.py horizontal datos/150M_L89.csv
   python tefsm_figuras.py inversion  datos/150M_L89.csv --punto 88
 
@@ -321,11 +319,9 @@ def figura_pseudo(args):
 
 
 # ----------------------------------------------------------------------------
-# Figuras 3 y 4 de: Gomo & Ngobe, "Telluric Electric Frequency Selection Method (TEFSM) in
+# Figura 4 de: Gomo & Ngobe, "Telluric Electric Frequency Selection Method (TEFSM) in
 # Geophysical Groundwater Exploration: Emerging Issues", en Aquifers - Advances in
 # Hydrogeology, IntechOpen, DOI 10.5772/intechopen.1013979
-#   Fig. 3: perfil VERTICAL de la EPD (mV) contra la profundidad en una estacion,
-#           con columna litologica y venas de agua opcionales.
 #   Fig. 4: perfil HORIZONTAL de la EPD (escala log) con una curva por profundidad.
 # Entrada: formato del equipo (L, N, freqNN), igual que la figura 13.
 # ----------------------------------------------------------------------------
@@ -365,58 +361,6 @@ def estacion_auto(V, umbral=0.1, umbral_anomalia=0.15):
     score = bajo.sum(axis=0) / np.maximum(valido.sum(axis=0), 1)    # < 0 = zona baja
     lo, hi = (1, npts - 1) if npts > 4 else (0, npts)
     return lo + int(np.argmin(score[lo:hi]))
-
-
-def figura_vertical(args):
-    n, y, h, V = matriz_equipo(args)
-    puntos = [float(p) for p in args.punto.split(",")] if args.punto else [n[estacion_auto(V, args.umbral, args.umbral_anomalia)]]
-    fig = plt.figure(figsize=(7.5, 8))
-    litologia = None
-    if args.litologia:
-        litologia = pd.read_csv(args.litologia)
-        litologia.columns = [c.strip().lower() for c in litologia.columns]   # tope_m, base_m, nombre
-        gs = fig.add_gridspec(1, 2, width_ratios=[2.2, 1], wspace=0.02)
-        ax = fig.add_subplot(gs[0])
-        axl = fig.add_subplot(gs[1], sharey=ax)
-    else:
-        ax = fig.add_subplot(111)
-    for p in puntos:
-        j = int(np.argmin(np.abs(n - p)))
-        ax.plot(V[:, j], h, color="#e8603c", lw=1.4, marker="D", ms=4, mfc="#c8102e",
-                mec="k", mew=0.6, label=f"N = {n[j]:g}  (y = {y[j]:g} m)")
-    for a in (args.agua.split(",") if args.agua else []):
-        ax.axhline(float(a), color="k", ls="--", lw=1.4)
-    ax.set_ylim(h.max() * 1.02, 0)
-    ax.set_xlim(0, np.nanmax(V[:, [int(np.argmin(np.abs(n - p))) for p in puntos]]) * 1.1)
-    ax.xaxis.tick_top()
-    ax.xaxis.set_label_position("top")
-    ax.set_xlabel("Diferencia de potencial eléctrico (mV)")
-    ax.set_ylabel("Profundidad bajo la superficie (m)")
-    ax.grid(color="#bbb", lw=0.4)
-    ax.grid(which="major", color="#555", lw=0.6)
-    ax.minorticks_on()
-    if len(puntos) > 1:
-        ax.legend(loc="lower right", fontsize=8)
-    if litologia is not None:
-        axl.set_xlim(0, 1)
-        paleta = {}
-        for i, r in enumerate(litologia.itertuples()):
-            col = paleta.setdefault(r.nombre, plt.get_cmap("Set2")(len(paleta) % 8))
-            axl.add_patch(plt.Rectangle((0, r.tope_m), 1, r.base_m - r.tope_m, fc=col, ec="k", lw=0.6,
-                                        hatch=["", "..", "////", "xx", "\\\\"][list(paleta).index(r.nombre) % 5]))
-        axl.set_title("Litología", fontsize=9)
-        axl.set_xticks([])
-        axl.yaxis.tick_right()
-        axl.tick_params(labelright=False)
-        axl.xaxis.tick_top()
-        handles = [plt.Rectangle((0, 0), 1, 1, fc=c, ec="k") for c in paleta.values()]
-        fig.legend(handles, list(paleta), loc="lower center", ncol=len(paleta), fontsize=8, frameon=False)
-    est = ""
-    if len(puntos) == 1:
-        jj = int(np.argmin(np.abs(n - puntos[0])))
-        est = f"\nx = {y[jj]:g} m (N = {n[jj]:g})"
-    fig.suptitle(f"Perfil vertical de EPD\n{etiqueta_csv(args.archivo)}{est}", fontweight="bold")
-    guardar(fig, args)
 
 
 def figura_horizontal(args):
@@ -656,13 +600,6 @@ def main():
                         help="caida (log10) bajo la mediana lateral para elegir la estacion (def. 0.15 = -30%%)")
         comun(sp)
 
-    v = sub.add_parser("vertical", help="Fig. 3 (Gomo y Ngobe): perfil vertical de EPD vs profundidad")
-    comun_eq(v)
-    v.add_argument("--punto", default=None, help="N de la estacion (o varios separados por coma); def.: la de mayor anomalia baja")
-    v.add_argument("--litologia", default=None, help="CSV con columnas tope_m, base_m, nombre")
-    v.add_argument("--agua", default=None, help="profundidades (m) de venas de agua, separadas por coma")
-    v.set_defaults(fn=figura_vertical)
-
     hz = sub.add_parser("horizontal", help="Fig. 4 (Gomo y Ngobe): perfil horizontal de EPD (log), una curva por profundidad")
     comun_eq(hz)
     hz.add_argument("--profundidades", default=None, help="profundidades (m) a graficar, separadas por coma")
@@ -689,7 +626,7 @@ def main():
         if a.salida is None:
             a.salida = carpeta_salida(a.archivo)
         if a.nombre is None:                 # nombre por defecto distinto para cada comando
-            prefijo = {"pseudo": "fig13_", "vertical": "fig3_vertical_", "horizontal": "fig4_horizontal_",
+            prefijo = {"pseudo": "fig13_", "horizontal": "fig4_horizontal_",
                        "modulo": "modulo_"}.get(a.cmd, "")
             a.nombre = prefijo + os.path.splitext(os.path.basename(a.archivo))[0]
 
@@ -703,8 +640,8 @@ def main():
             base += ["--linea", str(a.linea)]
         if a.mostrar:
             base += ["--mostrar"]
-        for c in ("pseudo", "vertical", "horizontal", "inversion"):
-            extra = ["--punto", str(a.punto)] if (a.punto is not None and c in ("pseudo", "vertical", "inversion")) else []
+        for c in ("pseudo", "horizontal", "inversion"):
+            extra = ["--punto", str(a.punto)] if (a.punto is not None and c in ("pseudo", "inversion")) else []
             extra += ["--umbral-anomalia", str(a.umbral_anomalia)]
             if c in ("pseudo", "inversion"):
                 extra += ["--lam", str(a.lam), "--rho-min", str(a.rho_min), "--rho-max", str(a.rho_max),
@@ -715,7 +652,7 @@ def main():
 
     t = sub.add_parser("todas", help="todas las figuras de un archivo del equipo, en su carpeta (figuras/L89_150m)")
     comun_eq(t)
-    t.add_argument("--punto", type=float, default=None, help="N de la estacion para pseudo, vertical e inversion (def.: la de mayor anomalia baja)")
+    t.add_argument("--punto", type=float, default=None, help="N de la estacion para pseudo e inversion (def.: la de mayor anomalia baja)")
     t.add_argument("--lam", type=float, default=3.0, help="regularizacion del ajuste de la estacion (def. 3)")
     t.add_argument("--rho-min", dest="rho_min", type=float, default=5.0, help="resistividad asignada a la EPD minima (ohm.m)")
     t.add_argument("--rho-max", dest="rho_max", type=float, default=5000.0, help="resistividad asignada a la EPD maxima (ohm.m)")
