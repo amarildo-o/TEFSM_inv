@@ -165,7 +165,7 @@ def figura_modulo(args):
         etiqueta = f"$10^{{{lg:g}}}$ Hz"
         ax.annotate(etiqueta, (y[-1], E[i][-1]), xytext=(-4, -12),
                     textcoords="offset points", ha="right", fontsize=8)
-    ax.set_xlabel("y / m")
+    ax.set_xlabel("x / m")
     ax.set_ylabel(r"$|E_y|$ / mV·m$^{-1}$")
     ax.set_xlim(y.min(), y.max())
     ax.set_title("(a)", y=-0.2)
@@ -178,7 +178,7 @@ def figura_modulo(args):
     cs = ax.contour(y, lgf, E, levels=[.75, 1, 1.5, 2, 3, 5, 10, 15],
                     colors="k", linewidths=0.6)
     ax.clabel(cs, fmt="%g", fontsize=7)
-    ax.set_xlabel("y / m")
+    ax.set_xlabel("x / m")
     ax.set_ylabel("lg f / Hz")
     ax.xaxis.set_label_position("top")
     ax.xaxis.tick_top()
@@ -192,7 +192,7 @@ def figura_modulo(args):
         cf = ax.contourf(y, lgf, Ph, levels=20, cmap=CMAP_E)
         cs = ax.contour(y, lgf, Ph, levels=10, colors="k", linewidths=0.5)
         ax.clabel(cs, fmt="%g", fontsize=6)
-        ax.set_xlabel("y / m")
+        ax.set_xlabel("x / m")
         ax.set_ylabel("lg f / Hz")
         ax.xaxis.set_label_position("top")
         ax.xaxis.tick_top()
@@ -261,7 +261,7 @@ def figura_pseudo(args):
         ax.axvline(args.zk, color="red", lw=1.5)
         ax.annotate("ZK", (args.zk, 0), xytext=(0, 22), textcoords="offset points",
                     color="red", ha="center", weight="bold")
-    ax.set_xlabel("y / m")
+    ax.set_xlabel("x / m")
     ax.set_ylabel(r"$h_s$ / m")
     ax.xaxis.set_label_position("top")
     ax.xaxis.tick_top()
