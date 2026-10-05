@@ -56,6 +56,23 @@ python tefsm_figuras.py horizontal ejemplos/150M_L89.csv --zona 9,15
 - `horizontal`: `--profundidades 10,20,…` o `--cada N` (1 de cada N canales, def. 2); `--zona x1,x2[,ymin,ymax]` marca con un recuadro, por ejemplo una zona afectada por ruido. Las lecturas ≤ 0 no se dibujan (escala logarítmica).
 - Según ese capítulo, la EPD que mide el equipo no se convierte en resistividad; refleja el efecto de apantallamiento del subsuelo.
 
+## Figura resumen (curvas, sección 2D, inversión y resistividad)
+
+Cuatro paneles a partir de un CSV del equipo: curvas de frecuencia normalizadas con zonas de agua, sección 2D (PowerNorm), "inversión" de la EPD en una estación y modelo de resistividad.
+
+```
+python tefsm_figuras.py resumen ejemplos/150M_L89.csv
+python tefsm_figuras.py resumen ejemplos/300M_L19.csv --punto 88 --gamma 0.3 --rho-min 5 --rho-max 500
+```
+
+**Qué es y qué no es.** Gomo y Ngobe indican que los valores del equipo no se pueden convertir en resistividad. Por eso el panel "modelo de resistividad" es una **aproximación empírica y cualitativa**, no una inversión física:
+
+- *Calculado*: ajuste regularizado (Tikhonov, segunda derivada) de la EPD observada contra la profundidad (`--lam`); *Suavizado*: filtro gaussiano (`--factor-suavizado`). RMS = diferencia entre el ajuste y las lecturas.
+- *Resistividad*: mapeo log-lineal de la EPD ajustada al intervalo `--rho-min`…`--rho-max` (más EPD, más resistividad). Calíbrelo con un sondeo o con resistividad eléctrica local (Tabla 1 de Yang et al.: arcilla limosa 20–200, zona fracturada 80–400, granito 130–14 000 Ω·m).
+- *Zonas de agua* (cian y recuadros azules): EPD baja respecto a la mediana lateral a cada profundidad (`--umbral-anomalia`, def. 0.15 en log10, ≈ −30 %; `--min-celdas`).
+- *Estación*: `--punto N` o `--x m`; por defecto, la de mayor anomalía baja (sin contar los bordes del perfil).
+- `--gamma` (def. 0.30) es el exponente de PowerNorm de la sección 2D.
+
 ## Figuras de ejemplo
 
 En `ejemplos/figuras/` están los PNG generados con los CSV de `ejemplos/`
@@ -63,6 +80,7 @@ En `ejemplos/figuras/` están los PNG generados con los CSV de `ejemplos/`
 
 - `fig2.png`, `fig4.png`, `fig6.png`: módulo de Ey (curvas y pseudo-sección; fig6 incluye la fase).
 - `fig13_sintetico.png`: pseudo-sección normalizada con datos sintéticos.
+- `resumen_150M_L89.png` y `resumen_300M_L19.png`: figura resumen de cuatro paneles.
 - `fig3_vertical_*.png` y `fig4_horizontal_*.png`: figuras 3 y 4 de Gomo y Ngobe con los datos del equipo.
 - `fig13_150M_L89.png` y `fig13_300M_L19.png`: pseudo-sección con los datos reales del equipo (sondeos a 150 m y 300 m; 18 puntos cada 1.5 m, profundidad lineal con el canal).
 
