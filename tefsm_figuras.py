@@ -495,8 +495,12 @@ def figura_inversion(args):
     regulares = list(np.unique(np.round(np.linspace(0, len(rho) - 1, max(args.etiquetas, 2))).astype(int)))
     prioridad = [0, len(rho) - 1] + ext + regulares
     sep = args.prof / 22                                       # separacion vertical minima entre etiquetas
+    # no se etiquetan los puntos que valen exactamente el minimo o el maximo asignados (se indican al pie)
+    es_limite = lambda i: np.isclose(rho[i], args.rho_min, rtol=1e-6) or np.isclose(rho[i], args.rho_max, rtol=1e-6)
     elegidas = []
     for i in prioridad:
+        if es_limite(i):
+            continue
         if all(abs(hv[i] - hv[q]) >= sep for q in elegidas) and len(elegidas) < max(args.etiquetas, 2) + len(ext) + 2:
             elegidas.append(i)
     for i in sorted(elegidas):
@@ -510,7 +514,9 @@ def figura_inversion(args):
     ax.set_ylabel("Profundidad (m)")
     ax.set_title(f"Modelo de resistividad (aproximado)\n{etiqueta_csv(args.archivo)}\nx = {xs:g} m (N = {n[j]:g})", fontweight="bold")
     ax.grid(ls=":", alpha=0.5, which="both")
-    fig.tight_layout()
+    fig.text(0.5, 0.012, f"Se usó un mínimo de {args.rho_min:g} ohm·m y un máximo de {args.rho_max:g} ohm·m",
+             ha="center", fontsize=8.5)
+    fig.tight_layout(rect=(0, 0.04, 1, 1))
     ruta = os.path.join(args.salida, f"Modelo_Resistividad_{base}.png")
     terminar(fig, ruta, args)
 
