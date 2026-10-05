@@ -38,6 +38,8 @@ python tefsm_figuras.py horizontal datos/150M_L89.csv
 python tefsm_figuras.py inversion  datos/300M_L19.csv --punto 88
 ```
 
+Cada comando guarda sus PNG en `figuras/` (carpeta de salida: `--salida`) e imprime la ruta completa de cada archivo; los nombres por defecto son `fig13_*`, `fig3_vertical_*`, `fig4_horizontal_*`, `SP_Inversion_*` y `Modelo_Resistividad_*`. Por defecto no se abre ninguna ventana: añada `--mostrar` para ver la figura en pantalla además de guardarla.
+
 Opciones útiles (`-h` en cada comando muestra todas):
 - `--umbral` (0.1 mV): lecturas menores se consideran ruido o canal muerto.
 - `pseudo`: `--zk x` marca un sondeo; `--escala-h ec12` usa hs = c·503·√(ρ/f) del artículo en lugar de la profundidad lineal.

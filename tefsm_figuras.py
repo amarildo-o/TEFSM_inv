@@ -29,9 +29,6 @@ import sys
 
 import numpy as np
 import pandas as pd
-import matplotlib
-
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
 
@@ -345,7 +342,6 @@ def figura_vertical(args):
         handles = [plt.Rectangle((0, 0), 1, 1, fc=c, ec="k") for c in paleta.values()]
         fig.legend(handles, list(paleta), loc="lower center", ncol=len(paleta), fontsize=8, frameon=False)
     fig.suptitle(f"Perfil vertical de EPD (Fig. 3)\n{etiqueta_csv(args.archivo)}", fontweight="bold")
-    args.nombre = args.nombre or "fig3_perfil_vertical"
     guardar(fig, args)
 
 
@@ -374,7 +370,6 @@ def figura_horizontal(args):
         ax.add_patch(plt.Rectangle((z[0], zy0), z[1] - z[0], zy1 - zy0, fill=False, ls="--", ec="k", lw=1.4))
     ax.legend(ncol=3, fontsize=8, loc="lower right", framealpha=0.9)
     ax.set_title(f"Perfil horizontal de EPD (Fig. 4)\n{etiqueta_csv(args.archivo)}", fontweight="bold")
-    args.nombre = args.nombre or "fig4_perfil_horizontal"
     guardar(fig, args)
 
 
@@ -443,9 +438,7 @@ def figura_inversion(args):
     ax.grid(ls=":", alpha=0.5)
     fig.tight_layout()
     ruta = os.path.join(args.salida, f"SP_Inversion_{base}.png")
-    fig.savefig(ruta, dpi=args.dpi)
-    plt.close(fig)
-    print("Figura guardada en", ruta, f"(estacion x = {xs:g} m, N = {n[j]:g})")
+    terminar(fig, ruta, args, f"(estacion x = {xs:g} m, N = {n[j]:g})")
 
     # --- Modelo de resistividad (aproximado)
     t = np.clip((m - m.min()) / max(m.max() - m.min(), 1e-12), 0, 1)
@@ -469,17 +462,23 @@ def figura_inversion(args):
              ha="center", fontsize=7, color="#555")
     fig.tight_layout(rect=(0, 0.02, 1, 1))
     ruta = os.path.join(args.salida, f"Modelo_Resistividad_{base}.png")
+    terminar(fig, ruta, args)
+
+
+def terminar(fig, ruta, args, extra=""):
+    """Guarda el PNG, imprime su ruta completa y, con --mostrar, abre la figura en pantalla."""
     fig.savefig(ruta, dpi=args.dpi)
+    print("Figura guardada en", os.path.abspath(ruta), extra)
+    if args.mostrar:
+        plt.show()
     plt.close(fig)
-    print("Figura guardada en", ruta)
 
 
 def guardar(fig, args):
     os.makedirs(args.salida, exist_ok=True)
     ruta = os.path.join(args.salida, f"{args.nombre}.png")
     fig.tight_layout()
-    fig.savefig(ruta, dpi=args.dpi)
-    print("Figura guardada en", ruta)
+    terminar(fig, ruta, args)
 
 
 def main():
@@ -490,6 +489,7 @@ def main():
         sp.add_argument("--nombre", default=None, help="nombre del PNG de salida (sin extension)")
         sp.add_argument("--salida", default="figuras", help="carpeta de salida")
         sp.add_argument("--dpi", type=int, default=200)
+        sp.add_argument("--mostrar", action="store_true", help="abrir las figuras en una ventana (ademas de guardarlas)")
 
     a = sub.add_parser("modulo", help="Figuras 2, 4 y 6 (|Ey| y fase)")
     a.add_argument("archivo")
@@ -561,8 +561,12 @@ def main():
     rs.set_defaults(fn=figura_inversion)
 
     args = p.parse_args()
-    if args.nombre is None:
-        args.nombre = os.path.splitext(os.path.basename(args.archivo))[0]
+    if not args.mostrar:
+        plt.switch_backend("Agg")        # sin ventana: solo se guardan los PNG
+    if args.nombre is None:       # nombre por defecto distinto para cada comando
+        prefijo = {"pseudo": "fig13_", "vertical": "fig3_vertical_", "horizontal": "fig4_horizontal_",
+                   "modulo": "modulo_"}.get(args.cmd, "")
+        args.nombre = prefijo + os.path.splitext(os.path.basename(args.archivo))[0]
     args.fn(args)
 
 
