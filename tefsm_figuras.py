@@ -260,7 +260,7 @@ def figura_pseudo(args):
     ax.set_ylim(-hmax, 0)
     fig.colorbar(cf, ax=ax, orientation="horizontal", pad=0.04, shrink=0.8,
                  label=r"$\log_{10}(\Delta V/\Delta V_{min})$")
-    ax.set_title(f"Pseudo-sección normalizada (Fig. 13)\n{etiqueta_csv(args.archivo)}", fontweight="bold", pad=42)
+    ax.set_title(f"Pseudo-sección normalizada\n{etiqueta_csv(args.archivo)}", fontweight="bold", pad=42)
     guardar(fig, args)
 
 
@@ -341,7 +341,7 @@ def figura_vertical(args):
         axl.xaxis.tick_top()
         handles = [plt.Rectangle((0, 0), 1, 1, fc=c, ec="k") for c in paleta.values()]
         fig.legend(handles, list(paleta), loc="lower center", ncol=len(paleta), fontsize=8, frameon=False)
-    fig.suptitle(f"Perfil vertical de EPD (Fig. 3)\n{etiqueta_csv(args.archivo)}", fontweight="bold")
+    fig.suptitle(f"Perfil vertical de EPD\n{etiqueta_csv(args.archivo)}", fontweight="bold")
     guardar(fig, args)
 
 
@@ -369,7 +369,7 @@ def figura_horizontal(args):
         zy0, zy1 = (z[2], z[3]) if len(z) == 4 else (y0, y1)
         ax.add_patch(plt.Rectangle((z[0], zy0), z[1] - z[0], zy1 - zy0, fill=False, ls="--", ec="k", lw=1.4))
     ax.legend(ncol=3, fontsize=8, loc="lower right", framealpha=0.9)
-    ax.set_title(f"Perfil horizontal de EPD (Fig. 4)\n{etiqueta_csv(args.archivo)}", fontweight="bold")
+    ax.set_title(f"Perfil horizontal de EPD\n{etiqueta_csv(args.archivo)}", fontweight="bold")
     guardar(fig, args)
 
 
