@@ -19,7 +19,7 @@ figuras/           figuras finales generadas con esos datos
 
 CSV del equipo, una fila por punto de medida: `L` (registro de memoria), `N` (punto, 80…97) y `freq01…freqNN` (ΔV en mV; 36 o 40 canales).
 El nombre indica el rango de profundidad configurado: `150M_L89.csv` (150 m, registro 89) y `300M_L19.csv` (300 m, registro 19).
-Con 22 electrodos a 1.5 m se obtienen 18 puntos (`--dx 1.5`). `freq01` es el canal más somero y `freqNN` el más profundo; la profundidad de cada canal es lineal con su número hasta el rango configurado (`--prof`, o se lee del nombre).
+El espaciado entre electrodos es de 1 m (`--dx 1`, valor por defecto): 22 electrodos dan 18 puntos, de 0 a 17 m. `freq01` es el canal más somero y `freqNN` el más profundo; la profundidad de cada canal es lineal con su número hasta el rango configurado (`--prof`, o se lee del nombre).
 
 ## Figuras
 
@@ -48,7 +48,7 @@ Opciones útiles (`-h` en cada comando muestra todas):
 - `pseudo`: `--zk x` marca un sondeo; `--escala-h ec12` usa hs = c·503·√(ρ/f) del artículo en lugar de la profundidad lineal.
 - `vertical` e `inversion`: sin `--punto`/`--x` usan la misma estación (la de mayor anomalía baja).
 - `vertical`: `--agua 25,45` marca venas de agua; `--litologia archivo.csv` (columnas `tope_m,base_m,nombre`) agrega la columna litológica.
-- `horizontal`: `--zona x1,x2` recuadra una zona (p. ej. de ruido); `--cada N` / `--profundidades`.
+- `horizontal`: `--zona x1,x2` recuadra una zona (p. ej. de ruido); `--cada N` (def.: el necesario para ~18 curvas) / `--profundidades`.
 - `inversion`: `--punto N` o `--x m`; sin ellos usa la estación de mayor anomalía baja (sin contar los bordes).
 
 ## Sobre el modelo de resistividad

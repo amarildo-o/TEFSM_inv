@@ -19,7 +19,7 @@ Ejemplos:
   python tefsm_figuras.py horizontal datos/150M_L89.csv
   python tefsm_figuras.py inversion  datos/150M_L89.csv --punto 88
 
-El rango de profundidad (100, 150 o 300 m) se toma del nombre del archivo (150M_...) o de --prof.
+El rango de profundidad (100, 150, 300, 500 m o el que configure el equipo) se toma del nombre del archivo (150M_...) o de --prof.
 Las figuras se guardan en figuras/ (--salida). Use -h en cada comando para ver sus opciones.
 """
 import argparse
@@ -218,11 +218,11 @@ def figura_pseudo(args):
 
     dvmin = df["dv_mv"].min()  # minimo de todo el perfil
     df["K"] = np.log10(df["dv_mv"] / dvmin)
-    # Rango de profundidad del equipo (100/150/300 m): --prof, o se toma del nombre ("150M_L89.csv")
+    # Rango de profundidad del equipo (100, 150, 300, 500 m...): --prof, o se toma del nombre ("150M_L89.csv")
     prof_eq = args.prof
     if prof_eq is None:
         m = re.search(r"(\d+)\s*m", os.path.basename(args.archivo), re.I)
-        prof_eq = float(m.group(1)) if m and float(m.group(1)) in (100, 150, 300) else None
+        prof_eq = float(m.group(1)) if m else None
     c = args.c
     if c is None:
         if prof_eq is not None:
@@ -235,7 +235,7 @@ def figura_pseudo(args):
             c = 1.0
     if args.escala_h == "lineal" and "canal" in df.columns and prof_eq is not None:
         # igual que el Profile del equipo: h = prof * canal / n_canales (freq01 somero ... freqNN profundo)
-        df["hs"] = prof_eq * df["canal"] / df.attrs.get("n_canales", df["canal"].max())
+        df["hs"] = prof_eq * df["canal"] / (df.attrs.get("n_canales", df["canal"].max()) + args.offset_canales)
     else:
         df["hs"] = c * 503.0 * np.sqrt(df["rho_ohm_m"] / df["f_hz"])
 
@@ -300,7 +300,7 @@ def matriz_equipo(args):
     if prof is None:
         m = re.search(r"(\d+)\s*m", os.path.basename(args.archivo), re.I)
         prof = float(m.group(1)) if m else 150.0
-    h = prof * np.arange(1, nf + 1) / nf          # profundidad lineal con el canal (como el equipo)
+    h = prof * np.arange(1, nf + 1) / (nf + args.offset_canales)   # profundidad lineal con el canal
     args.prof = prof
     return n, y, h, V
 
@@ -379,7 +379,8 @@ def figura_horizontal(args):
     if args.profundidades:
         idx = [int(np.argmin(np.abs(h - float(d)))) for d in args.profundidades.split(",")]
     else:
-        idx = list(range(args.cada - 1, V.shape[0], args.cada))
+        cada = args.cada or max(1, round(V.shape[0] / 18))     # unas 18 curvas, como la figura original
+        idx = list(range(cada - 1, V.shape[0], cada))
     fig, ax = plt.subplots(figsize=(10, 6))
     cm = plt.get_cmap("tab20")
     for k, i in enumerate(idx):
@@ -520,11 +521,13 @@ def main():
                    help="resistividad aparente (ohm.m) si no hay columna rho (def. 220, zona fracturada)")
     b.add_argument("--c", type=float, default=None,
                    help="coeficiente empirico c de la ec. 12 (si falta: se calibra con --prof, o 1)")
-    b.add_argument("--prof", type=float, default=None, choices=[100, 150, 300],
+    b.add_argument("--prof", type=float, default=None,
                    help="rango de profundidad configurado en el equipo (m); por defecto se lee del nombre del archivo")
     b.add_argument("--escala-h", choices=["lineal", "ec12"], default="lineal",
                    help="(formato equipo) profundidad: 'lineal' con el canal, como el Profile del equipo (def.), "
                         "o 'ec12' = c*503*sqrt(rho/f) del articulo")
+    b.add_argument("--offset-canales", dest="offset_canales", type=int, default=0,
+                   help="profundidad = prof * canal / (n_canales + offset); 0 (def.) o 1 segun la convencion del software")
     b.add_argument("--hmax", type=float, default=None, help="profundidad maxima mostrada (m)")
     b.add_argument("--zk", type=float, default=None, help="posicion (m) del sondeo ZK a marcar")
     b.add_argument("--freqs", default=None,
@@ -532,7 +535,7 @@ def main():
                         "una por columna freqNN, en el mismo orden")
     b.add_argument("--fmin", type=float, default=12.0, help="(formato equipo) fmin si no hay --freqs")
     b.add_argument("--fmax", type=float, default=5000.0, help="(formato equipo) fmax si no hay --freqs")
-    b.add_argument("--dx", type=float, default=1.5, help="(formato equipo) metros entre puntos N consecutivos (def. 1.5)")
+    b.add_argument("--dx", type=float, default=1.0, help="(formato equipo) metros entre electrodos / puntos N consecutivos (def. 1)")
     b.add_argument("--y0", type=float, default=0.0, help="(formato equipo) posicion y (m) del menor N")
     b.add_argument("--y-es-n", action="store_true", help="(formato equipo) usar N directamente como y (m)")
     b.add_argument("--linea", type=int, default=None, help="(formato equipo) filtrar por el registro L del equipo (p. ej. 93)")
@@ -544,11 +547,13 @@ def main():
 
     def comun_eq(sp):
         sp.add_argument("archivo")
-        sp.add_argument("--prof", type=float, default=None, choices=[100, 150, 300],
+        sp.add_argument("--prof", type=float, default=None,
                         help="rango de profundidad del equipo (m); por defecto se lee del nombre del archivo")
-        sp.add_argument("--dx", type=float, default=1.5, help="metros entre puntos N (def. 1.5)")
+        sp.add_argument("--dx", type=float, default=1.0, help="metros entre electrodos / puntos N consecutivos (def. 1)")
         sp.add_argument("--y0", type=float, default=0.0, help="posicion y (m) del menor N")
         sp.add_argument("--linea", type=int, default=None, help="filtrar por registro L del equipo")
+        sp.add_argument("--offset-canales", dest="offset_canales", type=int, default=0,
+                        help="profundidad = prof * canal / (n_canales + offset); 0 (def.) o 1 segun la convencion del software")
         sp.add_argument("--umbral", type=float, default=0.1, help="lecturas <= umbral (mV) = ruido/canal muerto (def. 0.1)")
         sp.add_argument("--umbral-anomalia", dest="umbral_anomalia", type=float, default=0.15,
                         help="caida (log10) bajo la mediana lateral para elegir la estacion (def. 0.15 = -30%%)")
@@ -564,7 +569,7 @@ def main():
     hz = sub.add_parser("horizontal", help="Fig. 4 (Gomo y Ngobe): perfil horizontal de EPD (log), una curva por profundidad")
     comun_eq(hz)
     hz.add_argument("--profundidades", default=None, help="profundidades (m) a graficar, separadas por coma")
-    hz.add_argument("--cada", type=int, default=2, help="si no hay --profundidades: 1 de cada N canales (def. 2)")
+    hz.add_argument("--cada", type=int, default=None, help="si no hay --profundidades: 1 de cada N canales (def.: el necesario para ~18 curvas)")
     hz.add_argument("--zona", default=None, help="recuadro a marcar: x1,x2[,ymin,ymax] (p. ej. zona de ruido)")
     hz.set_defaults(fn=figura_horizontal)
 
@@ -591,7 +596,7 @@ def main():
     def figura_todas(a):
         """Genera todas las figuras de un archivo del equipo en su carpeta (figuras/L89_150m)."""
         base = [a.archivo, "--salida", a.salida, "--dpi", str(a.dpi), "--dx", str(a.dx), "--y0", str(a.y0),
-                "--umbral", str(a.umbral)]
+                "--umbral", str(a.umbral), "--offset-canales", str(a.offset_canales)]
         if a.prof:
             base += ["--prof", str(a.prof)]
         if a.linea is not None:
