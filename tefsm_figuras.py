@@ -129,6 +129,13 @@ ESTILOS = {1.1: (":", None), 1.4: ("-", None), 1.6: (":", "^"),
 # ----------------------------------------------------------------------------
 # Figuras 2, 4, 6
 # ----------------------------------------------------------------------------
+def etiqueta_csv(path):
+    """'150M_L89.csv' -> '150M_L89.csv: L89 a 150m' (registro y rango de profundidad del nombre)."""
+    nombre = os.path.basename(path)
+    m = re.match(r"(\d+)\s*M_L(\d+)", os.path.splitext(nombre)[0], re.I)
+    return f"{nombre}: L{m.group(2)} a {m.group(1)}m" if m else nombre
+
+
 def figura_modulo(args):
     df = leer(args.archivo, ["y_m", "f_hz", "ey_mv"], ["fase_deg"])
     y, f, E = a_malla(df, "ey_mv")
@@ -183,6 +190,7 @@ def figura_modulo(args):
         ax.set_title("(c)", y=-0.2)
         fig.colorbar(cf, ax=ax, label="φ / (°)", pad=0.03)
 
+    fig.suptitle(f"Módulo de Ey - {etiqueta_csv(args.archivo)}", fontweight="bold")
     guardar(fig, args)
 
 
@@ -255,6 +263,7 @@ def figura_pseudo(args):
     ax.set_ylim(-hmax, 0)
     fig.colorbar(cf, ax=ax, orientation="horizontal", pad=0.04, shrink=0.8,
                  label=r"$\log_{10}(\Delta V/\Delta V_{min})$")
+    ax.set_title(f"Pseudo-sección normalizada (Fig. 13)\n{etiqueta_csv(args.archivo)}", fontweight="bold", pad=42)
     guardar(fig, args)
 
 
@@ -335,6 +344,7 @@ def figura_vertical(args):
         axl.xaxis.tick_top()
         handles = [plt.Rectangle((0, 0), 1, 1, fc=c, ec="k") for c in paleta.values()]
         fig.legend(handles, list(paleta), loc="lower center", ncol=len(paleta), fontsize=8, frameon=False)
+    fig.suptitle(f"Perfil vertical de EPD (Fig. 3)\n{etiqueta_csv(args.archivo)}", fontweight="bold")
     args.nombre = args.nombre or "fig3_perfil_vertical"
     guardar(fig, args)
 
@@ -363,6 +373,7 @@ def figura_horizontal(args):
         zy0, zy1 = (z[2], z[3]) if len(z) == 4 else (y0, y1)
         ax.add_patch(plt.Rectangle((z[0], zy0), z[1] - z[0], zy1 - zy0, fill=False, ls="--", ec="k", lw=1.4))
     ax.legend(ncol=3, fontsize=8, loc="lower right", framealpha=0.9)
+    ax.set_title(f"Perfil horizontal de EPD (Fig. 4)\n{etiqueta_csv(args.archivo)}", fontweight="bold")
     args.nombre = args.nombre or "fig4_perfil_horizontal"
     guardar(fig, args)
 
@@ -428,7 +439,7 @@ def figura_inversion(args):
     ax.set_xlim(left=0)
     ax.set_xlabel("SP (mV)")
     ax.set_ylabel("Profundidad (m)")
-    ax.set_title(f"SP Inversion\nen x = {xs:g} m (N = {n[j]:g})", fontweight="bold")
+    ax.set_title(f"SP Inversion\n{etiqueta_csv(args.archivo)}\nx = {xs:g} m (N = {n[j]:g})", fontweight="bold")
     ax.grid(ls=":", alpha=0.5)
     fig.tight_layout()
     ruta = os.path.join(args.salida, f"SP_Inversion_{base}.png")
@@ -452,7 +463,7 @@ def figura_inversion(args):
     ax.set_ylim(args.prof, 0)
     ax.set_xlabel("Resistividad (ohm·m)")
     ax.set_ylabel("Profundidad (m)")
-    ax.set_title(f"Modelo de resistividad (aproximado)\nx = {xs:g} m (N = {n[j]:g})", fontweight="bold")
+    ax.set_title(f"Modelo de resistividad (aproximado)\n{etiqueta_csv(args.archivo)}\nx = {xs:g} m (N = {n[j]:g})", fontweight="bold")
     ax.grid(ls=":", alpha=0.5, which="both")
     fig.text(0.5, 0.005, f"Mapeo empírico de la EPD a {args.rho_min:g}–{args.rho_max:g} ohm·m; no es una inversión física",
              ha="center", fontsize=7, color="#555")
