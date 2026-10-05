@@ -19,7 +19,7 @@ Ejemplos:
   python tefsm_figuras.py horizontal datos/150M_L89.csv
   python tefsm_figuras.py inversion  datos/150M_L89.csv --punto 88
 
-El rango de profundidad (100, 150, 300, 500 m o el que configure el equipo) se toma del nombre del archivo (150M_...) o de --prof.
+El rango de profundidad (100, 150, 300 o 500 m) se toma del inicio del nombre del archivo (150M_L89.csv) o de --prof.
 Las figuras se guardan en figuras/ (--salida). Use -h en cada comando para ver sus opciones.
 """
 import argparse
@@ -127,6 +127,21 @@ ESTILOS = {1.1: (":", None), 1.4: ("-", None), 1.6: (":", "^"),
 # ----------------------------------------------------------------------------
 # Figuras 2, 4, 6
 # ----------------------------------------------------------------------------
+PROFUNDIDADES = (100, 150, 300, 500)     # rangos de profundidad del equipo (m)
+
+
+def profundidad_equipo(path, prof=None):
+    """Rango de profundidad (100, 150, 300 o 500 m) indicado al inicio del nombre: '150M_L89.csv' -> 150."""
+    if prof is None:
+        m = re.match(r"(\d+)M_", os.path.basename(path), re.I)
+        prof = float(m.group(1)) if m else None
+    if prof not in PROFUNDIDADES:
+        sys.exit(f"No se pudo determinar la profundidad de '{os.path.basename(path)}'. El nombre debe empezar con "
+                 f"100M_, 150M_, 300M_ o 500M_ (p. ej. 150M_L89.csv), o indique --prof "
+                 f"({', '.join(map(str, PROFUNDIDADES))}).")
+    return float(prof)
+
+
 def carpeta_salida(path):
     """'150M_L89.csv' -> 'figuras/L89_150m' (una carpeta por archivo de entrada)."""
     m = re.match(r"(\d+)\s*M_L(\d+)", os.path.splitext(os.path.basename(path))[0], re.I)
@@ -218,11 +233,8 @@ def figura_pseudo(args):
 
     dvmin = df["dv_mv"].min()  # minimo de todo el perfil
     df["K"] = np.log10(df["dv_mv"] / dvmin)
-    # Rango de profundidad del equipo (100, 150, 300, 500 m...): --prof, o se toma del nombre ("150M_L89.csv")
-    prof_eq = args.prof
-    if prof_eq is None:
-        m = re.search(r"(\d+)\s*m", os.path.basename(args.archivo), re.I)
-        prof_eq = float(m.group(1)) if m else None
+    # Rango de profundidad del equipo (100, 150, 300 o 500 m): del nombre ("150M_L89.csv") o --prof
+    prof_eq = profundidad_equipo(args.archivo, args.prof) if "canal" in df.columns else args.prof
     c = args.c
     if c is None:
         if prof_eq is not None:
@@ -296,10 +308,7 @@ def matriz_equipo(args):
     y = (n - n.min()) * args.dx + args.y0
     V = df[cols].apply(pd.to_numeric, errors="coerce").values.T
     nf = V.shape[0]
-    prof = args.prof
-    if prof is None:
-        m = re.search(r"(\d+)\s*m", os.path.basename(args.archivo), re.I)
-        prof = float(m.group(1)) if m else 150.0
+    prof = profundidad_equipo(args.archivo, args.prof)
     h = prof * np.arange(1, nf + 1) / (nf + args.offset_canales)   # profundidad lineal con el canal
     args.prof = prof
     return n, y, h, V
@@ -521,8 +530,8 @@ def main():
                    help="resistividad aparente (ohm.m) si no hay columna rho (def. 220, zona fracturada)")
     b.add_argument("--c", type=float, default=None,
                    help="coeficiente empirico c de la ec. 12 (si falta: se calibra con --prof, o 1)")
-    b.add_argument("--prof", type=float, default=None,
-                   help="rango de profundidad configurado en el equipo (m); por defecto se lee del nombre del archivo")
+    b.add_argument("--prof", type=float, default=None, choices=PROFUNDIDADES,
+                   help="rango de profundidad del equipo (m); por defecto se lee del nombre del archivo (150M_...)")
     b.add_argument("--escala-h", choices=["lineal", "ec12"], default="lineal",
                    help="(formato equipo) profundidad: 'lineal' con el canal, como el Profile del equipo (def.), "
                         "o 'ec12' = c*503*sqrt(rho/f) del articulo")
@@ -547,8 +556,8 @@ def main():
 
     def comun_eq(sp):
         sp.add_argument("archivo")
-        sp.add_argument("--prof", type=float, default=None,
-                        help="rango de profundidad del equipo (m); por defecto se lee del nombre del archivo")
+        sp.add_argument("--prof", type=float, default=None, choices=PROFUNDIDADES,
+                        help="rango de profundidad del equipo (m); por defecto se lee del nombre del archivo (150M_...)")
         sp.add_argument("--dx", type=float, default=1.0, help="metros entre electrodos / puntos N consecutivos (def. 1)")
         sp.add_argument("--y0", type=float, default=0.0, help="posicion y (m) del menor N")
         sp.add_argument("--linea", type=int, default=None, help="filtrar por registro L del equipo")

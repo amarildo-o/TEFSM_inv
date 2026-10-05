@@ -18,7 +18,7 @@ figuras/           figuras finales generadas con esos datos
 ## Datos de entrada
 
 CSV del equipo, una fila por punto de medida: `L` (registro de memoria), `N` (punto, 80…97) y `freq01…freqNN` (ΔV en mV; 36 o 40 canales).
-El nombre indica el rango de profundidad configurado: `150M_L89.csv` (150 m, registro 89) y `300M_L19.csv` (300 m, registro 19).
+**El nombre del archivo debe empezar con el rango de profundidad (`100M_`, `150M_`, `300M_` o `500M_`)**; de ahí el programa lo toma y, si falta o no es uno de esos cuatro valores, se detiene con un aviso (o use `--prof`). Ejemplos: `150M_L89.csv` (150 m, registro 89) y `300M_L19.csv` (300 m, registro 19).
 El espaciado entre electrodos es de 1 m (`--dx 1`, valor por defecto): 22 electrodos dan 18 puntos, de 0 a 17 m. `freq01` es el canal más somero y `freqNN` el más profundo; la profundidad de cada canal es lineal con su número hasta el rango configurado (`--prof`, o se lee del nombre).
 
 ## Figuras
