@@ -32,9 +32,10 @@ python tefsm_figuras.py pseudo ejemplos/150M_L93.csv --freqs frecuencias.txt --d
 
 - K = log10(ΔV/ΔVmin) (ec. 13) y hs = c·503·√(ρ/f) (ec. 12).
 - `L93` es el registro de memoria del equipo; `150M` es el rango de profundidad configurado (100, 150 o 300 m). Se toma del nombre del archivo o de `--prof`, y con él se calibra c para que la frecuencia más baja llegue a esa profundidad. Con `--c` se fija manualmente.
-- `--freqs`: frecuencias (Hz) de cada columna `freqNN`. Si se omite se asumen log-espaciadas entre 12 y 5000 Hz (`--fmin`, `--fmax`).
-- `--umbral` (def. 0.1 mV): descarta lecturas ≤ umbral como ruido/canal muerto.
-- `--dx`, `--y0`, `--y-es-n`: posición de los puntos N; `--linea`: filtra por registro L; `--zk`: marca un sondeo.
+- `--freqs`: frecuencias (Hz) de cada columna `freqNN`. Si se omite se asumen log-espaciadas entre 5000 y 12 Hz (`--fmax`, `--fmin`), con `freq01` la más alta (más somera) y `freqNN` la más baja (más profunda).
+- `--umbral` (def. 0.1 mV): las lecturas ≤ umbral se consideran ruido/canal muerto y se dejan en ΔVmin (K = 0, azul), como en la pantalla del equipo.
+- `--escala-h`: `lineal` (def. con datos del equipo) calcula la profundidad como `prof · canal / n` (freq01 somero … freqNN profundo, igual que el Profile del equipo); `ec12` usa hs = c·503·√(ρ/f) del artículo.
+- `--dx` (def. 1.5 m entre puntos; 22 electrodos dan 18 puntos N), `--y0`, `--y-es-n`: posición de los puntos N; `--linea`: filtra por registro L; `--zk`: marca un sondeo.
 
 `python tefsm_figuras.py demo --salida ejemplos` genera CSV sintéticos de prueba (no son datos del artículo).
 
@@ -45,6 +46,6 @@ En `ejemplos/figuras/` están los PNG generados con los CSV de `ejemplos/`
 
 - `fig2.png`, `fig4.png`, `fig6.png`: módulo de Ey (curvas y pseudo-sección; fig6 incluye la fase).
 - `fig13_sintetico.png`: pseudo-sección normalizada con datos sintéticos.
-- `fig13_150M_L93.png`: pseudo-sección con los datos reales del equipo (`150M_L93.csv`, frecuencias asumidas 12–5000 Hz).
+- `fig13_150M_L93.png`: pseudo-sección con los datos reales del equipo (`150M_L93.csv`; 18 puntos cada 1.5 m, profundidad lineal 0–150 m).
 
 Para regenerarlas: `python tefsm_figuras.py modulo ejemplos/datos_fig2.csv --nombre fig2 --salida ejemplos/figuras`

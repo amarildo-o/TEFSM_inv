@@ -98,19 +98,23 @@ def leer_equipo(path, args):
         if len(fr) != nf:
             sys.exit(f"Se dieron {len(fr)} frecuencias pero el archivo tiene {nf} columnas freqNN")
     else:
-        fr = np.logspace(np.log10(args.fmin), np.log10(args.fmax), nf)
+        fr = np.logspace(np.log10(args.fmax), np.log10(args.fmin), nf)
         print(f"AVISO: no se dieron frecuencias; se asumen {nf} valores log-espaciados "
-              f"entre {args.fmin:g} y {args.fmax:g} Hz (freq01 = la menor). Use --freqs.")
+              f"entre {args.fmin:g} y {args.fmax:g} Hz (freq01 = la mayor, la mas somera). Use --freqs.")
     y = (df["n"].astype(float) - df["n"].astype(float).min()) * args.dx + args.y0
     if args.y_es_n:
         y = df["n"].astype(float)
     filas = []
-    for c, f in zip(cols, fr):
-        filas.append(pd.DataFrame({"y_m": y.values, "f_hz": f,
+    for k, (c, f) in enumerate(zip(cols, fr), start=1):
+        filas.append(pd.DataFrame({"y_m": y.values, "f_hz": f, "canal": k,
                                    "dv_mv": pd.to_numeric(df[c], errors="coerce").values}))
     out = pd.concat(filas, ignore_index=True)
-    out = out[out["dv_mv"] > args.umbral].dropna()
+    out = out.dropna()
+    valido = out["dv_mv"] > args.umbral
+    # lecturas de ruido/canal muerto: se dejan en el minimo valido (K = 0), como en la pantalla del equipo
+    out.loc[~valido, "dv_mv"] = out.loc[valido, "dv_mv"].min()
     out.attrs["fmin_equipo"] = float(np.min(fr))
+    out.attrs["n_canales"] = nf
     return out
 
 
@@ -224,21 +228,25 @@ def figura_pseudo(args):
             # c tal que la frecuencia mas baja del equipo llegue a la profundidad configurada
             fmin = df.attrs.get("fmin_equipo", df["f_hz"].min())
             c = prof_eq / (503.0 * np.sqrt(args.rho / fmin))
-            print(f"Rango del equipo {prof_eq:g} m -> c = {c:.4f} (calibrado con f_min = {fmin:g} Hz, rho = {args.rho:g})")
+            if args.escala_h == "ec12":
+                print(f"Rango del equipo {prof_eq:g} m -> c = {c:.4f} (calibrado con f_min = {fmin:g} Hz, rho = {args.rho:g})")
         else:
             c = 1.0
-    df["hs"] = c * 503.0 * np.sqrt(df["rho_ohm_m"] / df["f_hz"])
+    if args.escala_h == "lineal" and "canal" in df.columns and prof_eq is not None:
+        # igual que el Profile del equipo: h = prof * canal / n_canales (freq01 somero ... freqNN profundo)
+        df["hs"] = prof_eq * df["canal"] / df.attrs.get("n_canales", df["canal"].max())
+    else:
+        df["hs"] = c * 503.0 * np.sqrt(df["rho_ohm_m"] / df["f_hz"])
 
     # interpolar K(hs) en cada posicion y sobre una malla de profundidad comun
     ys = np.sort(df["y_m"].unique())
     hmax = args.hmax or prof_eq or float(df["hs"].max())
-    hmin = float(df["hs"].min())
-    prof = np.linspace(hmin, hmax, 200)
+    prof = np.linspace(0.0, hmax, 200)
     K = np.full((len(prof), len(ys)), np.nan)
     for j, yy in enumerate(ys):
         s = df[df["y_m"] == yy].sort_values("hs")
         if len(s) >= 2:
-            K[:, j] = np.interp(prof, s["hs"], s["K"], left=np.nan, right=np.nan)
+            K[:, j] = np.interp(prof, s["hs"], s["K"], right=np.nan)
 
     fig, ax = plt.subplots(figsize=(7.5, 6))
     niveles = np.linspace(0, max(2.0, np.nanmax(K)), 21)
@@ -253,7 +261,8 @@ def figura_pseudo(args):
     ax.set_ylabel(r"$h_s$ / m")
     ax.xaxis.set_label_position("top")
     ax.xaxis.tick_top()
-    ax.set_xticks(np.round(ys))
+    ax.set_xticks(ys)
+    ax.set_xticklabels([f"{v:g}" for v in ys], fontsize=8)
     ax.set_ylim(-hmax, 0)
     fig.colorbar(cf, ax=ax, orientation="horizontal", pad=0.04, shrink=0.8,
                  label=r"$\log_{10}(\Delta V/\Delta V_{min})$")
@@ -330,6 +339,9 @@ def main():
                    help="coeficiente empirico c de la ec. 12 (si falta: se calibra con --prof, o 1)")
     b.add_argument("--prof", type=float, default=None, choices=[100, 150, 300],
                    help="rango de profundidad configurado en el equipo (m); por defecto se lee del nombre del archivo")
+    b.add_argument("--escala-h", choices=["lineal", "ec12"], default="lineal",
+                   help="(formato equipo) profundidad: 'lineal' con el canal, como el Profile del equipo (def.), "
+                        "o 'ec12' = c*503*sqrt(rho/f) del articulo")
     b.add_argument("--hmax", type=float, default=None, help="profundidad maxima mostrada (m)")
     b.add_argument("--zk", type=float, default=None, help="posicion (m) del sondeo ZK a marcar")
     b.add_argument("--freqs", default=None,
@@ -337,7 +349,7 @@ def main():
                         "una por columna freqNN, en el mismo orden")
     b.add_argument("--fmin", type=float, default=12.0, help="(formato equipo) fmin si no hay --freqs")
     b.add_argument("--fmax", type=float, default=5000.0, help="(formato equipo) fmax si no hay --freqs")
-    b.add_argument("--dx", type=float, default=1.0, help="(formato equipo) metros entre puntos N consecutivos")
+    b.add_argument("--dx", type=float, default=1.5, help="(formato equipo) metros entre puntos N consecutivos (def. 1.5)")
     b.add_argument("--y0", type=float, default=0.0, help="(formato equipo) posicion y (m) del menor N")
     b.add_argument("--y-es-n", action="store_true", help="(formato equipo) usar N directamente como y (m)")
     b.add_argument("--linea", type=int, default=None, help="(formato equipo) filtrar por el registro L del equipo (p. ej. 93)")
