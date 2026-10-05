@@ -384,8 +384,8 @@ def figura_horizontal(args):
 
 
 # ----------------------------------------------------------------------------
-# Figura resumen (4 paneles): curvas normalizadas + zonas, seccion 2D (PowerNorm),
-# "inversion" en una estacion y modelo de resistividad.
+# "SP Inversion" y "Modelo de resistividad (aproximado)": dos figuras independientes
+# para una estacion del perfil.
 #
 # IMPORTANTE: la EPD (mV) del equipo NO es una resistividad (Gomo y Ngobe: "groundwater detector
 # values cannot be converted to resistivity values"). Por eso aqui:
@@ -394,124 +394,89 @@ def figura_horizontal(args):
 #     (mas EPD => mas resistividad). Es un modelo cualitativo; calibrelo con un sondeo o con
 #     resistividad electrica local (Tabla 1 del articulo de Yang et al.: arcilla limosa 20-200,
 #     zona fracturada 80-400, granito 130-14000 ohm.m).
-#   * Zonas de agua = anomalias de EPD BAJA respecto a la mediana lateral a cada profundidad.
+#   * Estacion por defecto: la de mayor anomalia de EPD BAJA respecto a la mediana lateral a cada
+#     profundidad (sin contar los bordes del perfil).
 # ----------------------------------------------------------------------------
-def figura_resumen(args):
+def figura_inversion(args):
+    import warnings
     from scipy import ndimage
-    from matplotlib.colors import PowerNorm
 
     n, x, h, V = matriz_equipo(args)
     nf, npts = V.shape
     valido = V > args.umbral
-    Vn = V / np.nanmax(V)                                   # respuesta normalizada 0-1
     with np.errstate(divide="ignore", invalid="ignore"):
         L = np.where(valido, np.log10(np.where(valido, V, 1.0)), np.nan)
-    import warnings
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         med = np.nanmedian(L, axis=1, keepdims=True)       # canales sin datos validos -> NaN
-    A = L - med          # anomalia (log10) vs mediana lateral
-    umb_a = args.umbral_anomalia
-    bajo = np.where(np.isnan(A), 0.0, np.minimum(A + umb_a, 0.0))   # solo caidas > umbral
-    score = bajo.sum(axis=0) / np.maximum(valido.sum(axis=0), 1)    # <0 = zona baja
+    A = L - med
+    bajo = np.where(np.isnan(A), 0.0, np.minimum(A + args.umbral_anomalia, 0.0))
+    score = bajo.sum(axis=0) / np.maximum(valido.sum(axis=0), 1)    # < 0 = zona baja
     if args.x is not None:
         j = int(np.argmin(np.abs(x - args.x)))
     elif args.punto is not None:
         j = int(np.argmin(np.abs(n - args.punto)))
     else:
-        lo, hi = (1, npts - 1) if npts > 4 else (0, npts)      # se evitan los bordes del perfil
-        j = lo + int(np.argmin(score[lo:hi]))               # mayor anomalia baja = candidato
+        lo, hi = (1, npts - 1) if npts > 4 else (0, npts)
+        j = lo + int(np.argmin(score[lo:hi]))
     xs = x[j]
 
-    fig = plt.figure(figsize=(14, 9.5))
-    gs = fig.add_gridspec(2, 4, width_ratios=[1.35, 0.06, 1, 1], height_ratios=[1, 1.9],
-                          hspace=0.32, wspace=0.55)
-
-    # (1) curvas normalizadas + zonas
-    ax = fig.add_subplot(gs[0, :])
-    fuerza = np.clip(-score / max(-score.min(), 1e-9), 0, 1) if score.min() < 0 else np.zeros(npts)
-    for k in range(npts):
-        if fuerza[k] > 0.05:
-            ax.axvspan(x[k] - args.dx / 2, x[k] + args.dx / 2, color="cyan", alpha=0.15 + 0.5 * fuerza[k], lw=0)
-    for i in range(nf):
-        ax.plot(x, Vn[i], color="gray", lw=0.7)
-    ax.axvline(xs, color="k", lw=2, alpha=0.8)
-    ax.set_xlim(x.min() - args.dx / 2, x.max() + args.dx / 2)
-    ax.set_ylim(-0.05, 1.05)
-    ax.set_xlabel("Distancia x (m)")
-    ax.set_ylabel("Respuesta EPD normalizada")
-    ax.set_title("Curvas de frecuencia - zonas de agua subterránea (normalizado)", fontweight="bold")
-    ax.grid(ls=":", alpha=0.5)
-
-    # (2) seccion 2D con PowerNorm
-    ax2 = fig.add_subplot(gs[1, 0])
-    hh = np.concatenate([[0.0], h])
-    Z = np.vstack([np.where(valido[:1], Vn[:1], 0.0), np.where(valido, Vn, 0.0)])
-    pc = ax2.pcolormesh(x, hh, Z, shading="gouraud", cmap="jet",
-                        norm=PowerNorm(gamma=args.gamma, vmin=0, vmax=1))
-    ax2.axvline(xs, color="k", lw=2)
-    mascara = np.nan_to_num(A, nan=0.0) < -umb_a
-    lab, nl = ndimage.label(mascara)
-    for k in range(1, nl + 1):
-        ii, jj = np.where(lab == k)
-        if len(ii) < args.min_celdas:
-            continue
-        y0b = hh[ii.min()] if ii.min() > 0 else h[0] - (h[1] - h[0]) / 2
-        y1b = h[ii.max()] + (h[1] - h[0]) / 2
-        ax2.add_patch(plt.Rectangle((x[jj.min()] - args.dx / 2, y0b), (x[jj.max()] - x[jj.min()]) + args.dx,
-                                    y1b - y0b, fill=False, ec="blue", ls="--", lw=1.6))
-    ax2.set_ylim(args.prof, 0)
-    ax2.set_xlim(x.min(), x.max())
-    ax2.set_xlabel("Distancia x (m)")
-    ax2.set_ylabel("Profundidad (m)")
-    ax2.set_title(f"Sección 2D EPD (γ={args.gamma:.2f})", fontweight="bold")
-    cax = fig.add_subplot(gs[1, 1])
-    cb = fig.colorbar(pc, cax=cax)
-    cb.set_label("EPD normalizada (PowerNorm)")
-
-    # (3) "inversion" en la estacion elegida
     obs = valido[:, j]
     hv, vv = h[obs], V[obs, j]
-    ax3 = fig.add_subplot(gs[1, 2])
-    if obs.sum() >= 4:
-        D = np.diff(np.eye(len(vv)), 2, axis=0)
-        sc = vv.max()
-        m = np.linalg.solve(np.eye(len(vv)) + args.lam * D.T @ D, vv / sc) * sc    # ajuste regularizado
-        suav = ndimage.gaussian_filter1d(vv, args.factor_suavizado, mode="nearest")
-        rms = float(np.sqrt(np.mean((m - vv) ** 2)))
-        ax3.plot(vv, hv, ".", color="#6a5acd", ms=5, alpha=0.7, label="Observado")
-        ax3.plot(suav, hv, color="#17becf", lw=1.3, label=f"Suavizado (factor {args.factor_suavizado:g})")
-        ax3.plot(m, hv, color="red", lw=3, label=f"Calculado\nRMS={rms:.2f} ({100 * rms / sc:.1f}%)")
-        ax3.legend(loc="lower right", fontsize=7)
-        # (4) modelo de resistividad (mapeo empirico)
-        ax4 = fig.add_subplot(gs[1, 3])
-        t = np.clip((m - m.min()) / max(m.max() - m.min(), 1e-12), 0, 1)
-        rho = args.rho_min * (args.rho_max / args.rho_min) ** t
-        paso = h[1] - h[0]
-        bordes = np.concatenate([hv - paso / 2, [hv[-1] + paso / 2]])
-        ax4.step(np.concatenate([rho, rho[-1:]]), bordes, where="post", color="k", lw=1.8)
-        ext = [0] + [i for i in range(1, len(rho) - 1) if (rho[i] - rho[i - 1]) * (rho[i + 1] - rho[i]) < 0] + [len(rho) - 1]
-        for i in sorted(set(ext)):
-            ax4.annotate(f"{rho[i]:.3g}", (rho[i], hv[i]), fontsize=6.5, fontweight="bold",
-                         bbox=dict(boxstyle="square,pad=0.15", fc="#f5e663", ec="k", lw=0.6),
-                         xytext=(3, 0), textcoords="offset points")
-        ax4.set_xscale("log")
-        ax4.set_ylim(args.prof, 0)
-        ax4.set_xlabel("Resistividad (ohm·m)")
-        ax4.set_ylabel("Profundidad (m)")
-        ax4.set_title("Modelo de resistividad\n(aprox. empírica, ver README)", fontweight="bold", fontsize=10)
-        ax4.grid(ls=":", alpha=0.5, which="both")
-    ax3.set_ylim(args.prof, 0)
-    ax3.set_xlim(left=0)
-    ax3.set_xlabel("EPD (mV)")
-    ax3.set_title(f"Inversión de EPD\nen x = {xs:g} m (N = {n[j]:g})", fontweight="bold", fontsize=10)
-    ax3.grid(ls=":", alpha=0.5)
+    if obs.sum() < 4:
+        sys.exit(f"La estacion N = {n[j]:g} tiene menos de 4 lecturas validas (> {args.umbral:g} mV)")
+    D = np.diff(np.eye(len(vv)), 2, axis=0)
+    sc = vv.max()
+    m = np.linalg.solve(np.eye(len(vv)) + args.lam * D.T @ D, vv / sc) * sc    # ajuste regularizado
+    suav = ndimage.gaussian_filter1d(vv, args.factor_suavizado, mode="nearest")
+    rms = float(np.sqrt(np.mean((m - vv) ** 2)))
+
     base = os.path.splitext(os.path.basename(args.archivo))[0]
-    args.nombre = "resumen_" + base if args.nombre in (None, base) else args.nombre
     os.makedirs(args.salida, exist_ok=True)
-    ruta = os.path.join(args.salida, f"{args.nombre}.png")
-    fig.savefig(ruta, dpi=args.dpi, bbox_inches="tight")
+
+    # --- SP Inversion
+    fig, ax = plt.subplots(figsize=(5, 7))
+    ax.plot(vv, hv, ".", color="#6a5acd", ms=6, alpha=0.7, label="Observado")
+    ax.plot(suav, hv, color="#17becf", lw=1.3, label=f"Suavizado (factor {args.factor_suavizado:g})")
+    ax.plot(m, hv, color="red", lw=3, label=f"Calculado\nRMS={rms:.2f} ({100 * rms / sc:.1f}%)")
+    ax.legend(loc="lower right", fontsize=8)
+    ax.set_ylim(args.prof, 0)
+    ax.set_xlim(left=0)
+    ax.set_xlabel("SP (mV)")
+    ax.set_ylabel("Profundidad (m)")
+    ax.set_title(f"SP Inversion\nen x = {xs:g} m (N = {n[j]:g})", fontweight="bold")
+    ax.grid(ls=":", alpha=0.5)
+    fig.tight_layout()
+    ruta = os.path.join(args.salida, f"SP_Inversion_{base}.png")
+    fig.savefig(ruta, dpi=args.dpi)
+    plt.close(fig)
     print("Figura guardada en", ruta, f"(estacion x = {xs:g} m, N = {n[j]:g})")
+
+    # --- Modelo de resistividad (aproximado)
+    t = np.clip((m - m.min()) / max(m.max() - m.min(), 1e-12), 0, 1)
+    rho = args.rho_min * (args.rho_max / args.rho_min) ** t
+    paso = h[1] - h[0]
+    bordes = np.concatenate([hv - paso / 2, [hv[-1] + paso / 2]])
+    fig, ax = plt.subplots(figsize=(5, 7))
+    ax.step(np.concatenate([rho, rho[-1:]]), bordes, where="post", color="k", lw=1.8)
+    ext = [0] + [i for i in range(1, len(rho) - 1) if (rho[i] - rho[i - 1]) * (rho[i + 1] - rho[i]) < 0] + [len(rho) - 1]
+    for i in sorted(set(ext)):
+        ax.annotate(f"{rho[i]:.3g}", (rho[i], hv[i]), fontsize=7.5, fontweight="bold",
+                    bbox=dict(boxstyle="square,pad=0.15", fc="#f5e663", ec="k", lw=0.6),
+                    xytext=(3, 0), textcoords="offset points")
+    ax.set_xscale("log")
+    ax.set_ylim(args.prof, 0)
+    ax.set_xlabel("Resistividad (ohm·m)")
+    ax.set_ylabel("Profundidad (m)")
+    ax.set_title(f"Modelo de resistividad (aproximado)\nx = {xs:g} m (N = {n[j]:g})", fontweight="bold")
+    ax.grid(ls=":", alpha=0.5, which="both")
+    fig.text(0.5, 0.005, f"Mapeo empírico de la EPD a {args.rho_min:g}–{args.rho_max:g} ohm·m; no es una inversión física",
+             ha="center", fontsize=7, color="#555")
+    fig.tight_layout(rect=(0, 0.02, 1, 1))
+    ruta = os.path.join(args.salida, f"Modelo_Resistividad_{base}.png")
+    fig.savefig(ruta, dpi=args.dpi)
+    plt.close(fig)
+    print("Figura guardada en", ruta)
 
 
 def guardar(fig, args):
@@ -627,20 +592,18 @@ def main():
     hz.add_argument("--zona", default=None, help="recuadro a marcar: x1,x2[,ymin,ymax] (p. ej. zona de ruido)")
     hz.set_defaults(fn=figura_horizontal)
 
-    rs = sub.add_parser("resumen", help="Figura resumen: curvas, seccion 2D, inversion en una estacion y modelo de resistividad")
+    rs = sub.add_parser("inversion", help="SP Inversion y Modelo de resistividad (aproximado), dos figuras independientes")
     comun_eq(rs)
-    rs.add_argument("--punto", type=float, default=None, help="N de la estacion a invertir (def.: la de mayor anomalia baja)")
+    rs.add_argument("--punto", type=float, default=None, help="N de la estacion (def.: la de mayor anomalia baja)")
     rs.add_argument("--x", type=float, default=None, help="posicion x (m) de la estacion (alternativa a --punto)")
-    rs.add_argument("--gamma", type=float, default=0.30, help="exponente de PowerNorm de la seccion 2D (def. 0.30)")
     rs.add_argument("--umbral", type=float, default=0.1, help="lecturas <= umbral (mV) = ruido/canal muerto (def. 0.1)")
     rs.add_argument("--umbral-anomalia", dest="umbral_anomalia", type=float, default=0.15,
-                    help="caida (log10) bajo la mediana lateral para marcar una zona baja (def. 0.15 = -30%%)")
-    rs.add_argument("--min-celdas", dest="min_celdas", type=int, default=4, help="celdas minimas de un recuadro (def. 4)")
+                    help="caida (log10) bajo la mediana lateral para elegir la estacion (def. 0.15 = -30%%)")
     rs.add_argument("--lam", type=float, default=3.0, help="regularizacion del ajuste (def. 3)")
     rs.add_argument("--factor-suavizado", dest="factor_suavizado", type=float, default=3.0, help="sigma del suavizado (canales)")
     rs.add_argument("--rho-min", dest="rho_min", type=float, default=5.0, help="resistividad asignada a la EPD minima (ohm.m)")
     rs.add_argument("--rho-max", dest="rho_max", type=float, default=500.0, help="resistividad asignada a la EPD maxima (ohm.m)")
-    rs.set_defaults(fn=figura_resumen)
+    rs.set_defaults(fn=figura_inversion)
 
     c = sub.add_parser("demo", help="genera CSV sinteticos de ejemplo")
     c.add_argument("--salida", default="ejemplos")
