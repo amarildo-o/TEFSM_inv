@@ -37,3 +37,14 @@ python tefsm_figuras.py pseudo ejemplos/150M_L93.csv --freqs frecuencias.txt --d
 - `--dx`, `--y0`, `--y-es-n`: posición de los puntos N; `--linea`: filtra por registro L; `--zk`: marca un sondeo.
 
 `python tefsm_figuras.py demo --salida ejemplos` genera CSV sintéticos de prueba (no son datos del artículo).
+
+## Figuras de ejemplo
+
+En `ejemplos/figuras/` están los PNG generados con los CSV de `ejemplos/`
+(los CSV `datos_fig*.csv` son sintéticos, solo para probar el formato; no reproducen los resultados del artículo):
+
+- `fig2.png`, `fig4.png`, `fig6.png`: módulo de Ey (curvas y pseudo-sección; fig6 incluye la fase).
+- `fig13_sintetico.png`: pseudo-sección normalizada con datos sintéticos.
+- `fig13_150M_L93.png`: pseudo-sección con los datos reales del equipo (`150M_L93.csv`, frecuencias asumidas 12–5000 Hz).
+
+Para regenerarlas: `python tefsm_figuras.py modulo ejemplos/datos_fig2.csv --nombre fig2 --salida ejemplos/figuras`
