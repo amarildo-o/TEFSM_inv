@@ -1,87 +1,52 @@
 # TEFSM_inv
 
-Programa en Python que reproduce las figuras 2, 4, 6 y 13 de:
+Genera figuras a partir de lecturas de mV del equipo TEFSM (método de selección de frecuencias del campo eléctrico telúrico).
 
-> Yang, T. et al. *Simulation of the Telluric Electrical Field Frequency Selection Method and Its Application in Mineral Water Exploration*. Water 2025, 17, 3314. https://doi.org/10.3390/w17223314
+Basado en:
+- Yang, T. et al., *Simulation of the Telluric Electrical Field Frequency Selection Method and Its Application in Mineral Water Exploration*, Water 2025, 17, 3314. https://doi.org/10.3390/w17223314 (figuras 2, 4, 6 y 13).
+- Gomo, M. y Ngobe, T., *Telluric Electric Frequency Selection Method (TEFSM) in Geophysical Groundwater Exploration: Emerging Issues*, en *Aquifers – Advances in Hydrogeology*, IntechOpen. https://doi.org/10.5772/intechopen.1013979 (figuras 3 y 4).
 
-Las lecturas (mV) se ingresan desde un archivo CSV o Excel.
-
-## Instalación
-
-```
-pip install -r requirements.txt
-```
-
-## Figuras 2, 4 y 6 (módulo de Ey y fase)
-
-CSV con columnas `y_m, f_hz, ey_mv` (y opcionalmente `fase_deg`, que añade el panel (c) de la fig. 6):
+## Contenido
 
 ```
-python tefsm_figuras.py modulo datos_fig2.csv --nombre fig2
+tefsm_figuras.py   programa
+requirements.txt   dependencias (pip install -r requirements.txt)
+datos/             lecturas del equipo (CSV)
+figuras/           figuras finales generadas con esos datos
 ```
 
-Estas figuras provienen de una simulación numérica 3D; el programa solo grafica los valores ingresados.
+## Datos de entrada
 
-## Figura 13 (pseudo-sección normalizada de ΔV)
+CSV del equipo, una fila por punto de medida: `L` (registro de memoria), `N` (punto, 80…97) y `freq01…freqNN` (ΔV en mV; 36 o 40 canales).
+El nombre indica el rango de profundidad configurado: `150M_L89.csv` (150 m, registro 89) y `300M_L19.csv` (300 m, registro 19).
+Con 22 electrodos a 1.5 m se obtienen 18 puntos (`--dx 1.5`). `freq01` es el canal más somero y `freqNN` el más profundo; la profundidad de cada canal es lineal con su número hasta el rango configurado (`--prof`, o se lee del nombre).
 
-Formato del equipo (`L, N, freq01…freqNN`, en mV; ver `ejemplos/150M_L89.csv`) o formato largo `y_m, f_hz, dv_mv [, rho_ohm_m]`:
+## Figuras
 
-```
-python tefsm_figuras.py pseudo ejemplos/150M_L89.csv
-python tefsm_figuras.py pseudo ejemplos/300M_L19.csv      # sondeo a 300 m, 40 canales
-```
-
-- K = log10(ΔV/ΔVmin) (ec. 13) y hs = c·503·√(ρ/f) (ec. 12).
-- En el nombre `150M_L89.csv`, `L89` es el registro de memoria del equipo y `150M` el rango de profundidad configurado (100, 150 o 300 m). El rango se toma del nombre del archivo o de `--prof`; el número de canales (36, 40…) se detecta de las columnas `freqNN`.
-- `--freqs`: frecuencias (Hz) de cada columna `freqNN`. Si se omite se asumen log-espaciadas entre 5000 y 12 Hz (`--fmax`, `--fmin`), con `freq01` la más alta (más somera) y `freqNN` la más baja (más profunda).
-- `--umbral` (def. 0.1 mV): las lecturas ≤ umbral se consideran ruido/canal muerto y se dejan en ΔVmin (K = 0, azul), como en la pantalla del equipo.
-- `--escala-h`: `lineal` (def. con datos del equipo) calcula la profundidad como `prof · canal / n` (freq01 somero … freqNN profundo, igual que el Profile del equipo); `ec12` usa hs = c·503·√(ρ/f) del artículo.
-- `--dx` (def. 1.5 m entre puntos; 22 electrodos dan 18 puntos N), `--y0`, `--y-es-n`: posición de los puntos N; `--linea`: filtra por registro L; `--zk`: marca un sondeo.
-
-`python tefsm_figuras.py demo --salida ejemplos` genera CSV sintéticos de prueba (no son datos del artículo).
-
-## Figuras 3 y 4 (perfil vertical y horizontal de la EPD)
-
-Basadas en las figuras 3 y 4 de Gomo y Ngobe, *Telluric Electric Frequency Selection Method (TEFSM) in Geophysical Groundwater Exploration: Emerging Issues*, en *Aquifers – Advances in Hydrogeology* (IntechOpen, https://doi.org/10.5772/intechopen.1013979). Usan los datos del equipo (formato `L, N, freqNN`); la profundidad de cada canal es lineal hasta el rango configurado (100, 150 o 300 m).
+| Comando | Resultado |
+|---|---|
+| `pseudo` | Figura 13: pseudo-sección normalizada log10(ΔV/ΔVmin), `fig13_*.png` |
+| `vertical` | Figura 3 (Gomo y Ngobe): EPD vs profundidad en una estación, `fig3_vertical_*.png` |
+| `horizontal` | Figura 4 (Gomo y Ngobe): EPD (log) vs distancia, una curva por profundidad, `fig4_horizontal_*.png` |
+| `inversion` | `SP_Inversion_*.png` y `Modelo_Resistividad_*.png` (estación elegida) |
+| `modulo` | Figuras 2, 4 y 6 de Yang et al. (|Ey| y fase; CSV con `y_m, f_hz, ey_mv[, fase_deg]`; vienen de una simulación 3D, no del equipo) |
 
 ```
-# Fig. 3: EPD (mV) contra profundidad en una estacion, con litologia y venas de agua opcionales
-python tefsm_figuras.py vertical ejemplos/150M_L89.csv --punto 85 --agua 25,45 --litologia ejemplos/litologia_ejemplo.csv
-
-# Fig. 4: EPD (escala log) contra distancia horizontal, una curva por profundidad
-python tefsm_figuras.py horizontal ejemplos/150M_L89.csv --zona 9,15
+python tefsm_figuras.py pseudo     datos/150M_L89.csv
+python tefsm_figuras.py vertical   datos/150M_L89.csv --punto 85
+python tefsm_figuras.py horizontal datos/150M_L89.csv
+python tefsm_figuras.py inversion  datos/300M_L19.csv --punto 88
 ```
 
-- `vertical`: `--punto N` (uno o varios N separados por coma), `--agua` (profundidades de venas de agua), `--litologia` (CSV `tope_m,base_m,nombre`; `ejemplos/litologia_ejemplo.csv` es un ejemplo inventado, no es la litología del sitio).
-- `horizontal`: `--profundidades 10,20,…` o `--cada N` (1 de cada N canales, def. 2); `--zona x1,x2[,ymin,ymax]` marca con un recuadro, por ejemplo una zona afectada por ruido. Las lecturas ≤ 0 no se dibujan (escala logarítmica).
-- Según ese capítulo, la EPD que mide el equipo no se convierte en resistividad; refleja el efecto de apantallamiento del subsuelo.
+Opciones útiles (`-h` en cada comando muestra todas):
+- `--umbral` (0.1 mV): lecturas menores se consideran ruido o canal muerto.
+- `pseudo`: `--zk x` marca un sondeo; `--escala-h ec12` usa hs = c·503·√(ρ/f) del artículo en lugar de la profundidad lineal.
+- `vertical`: `--agua 25,45` marca venas de agua; `--litologia archivo.csv` (columnas `tope_m,base_m,nombre`) agrega la columna litológica.
+- `horizontal`: `--zona x1,x2` recuadra una zona (p. ej. de ruido); `--cada N` / `--profundidades`.
+- `inversion`: `--punto N` o `--x m`; sin ellos usa la estación de mayor anomalía baja (sin contar los bordes).
 
-## SP Inversion y modelo de resistividad (aproximado)
+## Sobre el modelo de resistividad
 
-Dos figuras independientes para una estación del perfil, a partir de un CSV del equipo:
-
-```
-python tefsm_figuras.py inversion ejemplos/150M_L89.csv
-python tefsm_figuras.py inversion ejemplos/300M_L19.csv --punto 88 --rho-min 5 --rho-max 500
-```
-
-Genera `SP_Inversion_<archivo>.png` y `Modelo_Resistividad_<archivo>.png`.
-
-**Qué es y qué no es.** Gomo y Ngobe indican que los valores del equipo no se pueden convertir en resistividad. Por eso el modelo de resistividad es una **aproximación empírica y cualitativa**, no una inversión física:
-
-- *Calculado*: ajuste regularizado (Tikhonov, segunda derivada) de la EPD observada contra la profundidad (`--lam`); *Suavizado*: filtro gaussiano (`--factor-suavizado`). RMS = diferencia entre el ajuste y las lecturas.
-- *Resistividad*: mapeo log-lineal de la EPD ajustada al intervalo `--rho-min`…`--rho-max` (más EPD, más resistividad). Calíbrelo con un sondeo o con resistividad eléctrica local (Tabla 1 de Yang et al.: arcilla limosa 20–200, zona fracturada 80–400, granito 130–14 000 Ω·m).
-- *Estación*: `--punto N` o `--x m`; por defecto, la de mayor anomalía baja respecto a la mediana lateral (`--umbral-anomalia`), sin contar los bordes del perfil.
-
-## Figuras de ejemplo
-
-En `ejemplos/figuras/` están los PNG generados con los CSV de `ejemplos/`
-(los CSV `datos_fig*.csv` son sintéticos, solo para probar el formato; no reproducen los resultados del artículo):
-
-- `fig2.png`, `fig4.png`, `fig6.png`: módulo de Ey (curvas y pseudo-sección; fig6 incluye la fase).
-- `fig13_sintetico.png`: pseudo-sección normalizada con datos sintéticos.
-- `SP_Inversion_*.png` y `Modelo_Resistividad_*.png`: inversión de EPD y modelo de resistividad aproximado, por estación.
-- `fig3_vertical_*.png` y `fig4_horizontal_*.png`: figuras 3 y 4 de Gomo y Ngobe con los datos del equipo.
-- `fig13_150M_L89.png` y `fig13_300M_L19.png`: pseudo-sección con los datos reales del equipo (sondeos a 150 m y 300 m; 18 puntos cada 1.5 m, profundidad lineal con el canal).
-
-Para regenerarlas: `python tefsm_figuras.py modulo ejemplos/datos_fig2.csv --nombre fig2 --salida ejemplos/figuras`
+Gomo y Ngobe indican que los valores del equipo no se pueden convertir en resistividad. Por eso `Modelo_Resistividad_*.png` es una **aproximación empírica y cualitativa**, no una inversión física:
+- *Calculado*: ajuste regularizado (Tikhonov, 2.ª derivada) de la EPD observada contra la profundidad (`--lam`); *Suavizado*: filtro gaussiano (`--factor-suavizado`). RMS = diferencia entre el ajuste y las lecturas.
+- *Resistividad*: mapeo log-lineal de la EPD ajustada al intervalo `--rho-min 5` … `--rho-max 500` Ω·m (más EPD, más resistividad). Calíbrelo con un sondeo o con resistividad eléctrica local.

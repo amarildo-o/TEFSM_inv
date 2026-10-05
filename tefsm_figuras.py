@@ -1,42 +1,26 @@
 #!/usr/bin/env python3
 """
-Reproduce las figuras 2, 4, 6 y 13 de:
-  Yang et al., "Simulation of the Telluric Electrical Field Frequency Selection
-  Method and Its Application in Mineral Water Exploration", Water 2025, 17, 3314.
+TEFSM_inv: figuras a partir de lecturas de mV del equipo TEFSM (selector de frecuencias).
 
-Los datos (lecturas en mV) se ingresan desde un archivo CSV o Excel (.xlsx).
+Basado en:
+  Yang et al., Water 2025, 17, 3314 (figuras 2, 4, 6 y 13), y
+  Gomo y Ngobe, Aquifers - Advances in Hydrogeology, IntechOpen (figuras 3 y 4).
 
-USO
----
-  # Figuras 2, 4 y 6 (modulo de Ey: curvas + pseudo-seccion; fase si existe)
-  python tefsm_figuras.py modulo  datos_fig2.csv --nombre fig2
-  python tefsm_figuras.py modulo  datos_fig4.csv --nombre fig4
-  python tefsm_figuras.py modulo  datos_fig6.csv --nombre fig6   # con columna fase_deg -> panel (c)
+Comandos (datos del equipo: columnas L, N, freq01..freqNN en mV; ver datos/):
+  pseudo      Figura 13: pseudo-seccion normalizada log10(dV/dVmin) vs profundidad
+  vertical    Fig. 3 (Gomo y Ngobe): EPD vs profundidad en una estacion
+  horizontal  Fig. 4 (Gomo y Ngobe): EPD (log) vs distancia, una curva por profundidad
+  inversion   SP Inversion y Modelo de resistividad (aproximado), figuras independientes
+  modulo      Figuras 2, 4 y 6 de Yang et al.: |Ey| y fase (formato largo y_m, f_hz, ey_mv[, fase_deg])
 
-  # Figura 13 (pseudo-seccion normalizada de dV, 40 frecuencias)
-  python tefsm_figuras.py pseudo  datos_L8.csv --nombre fig13b --zk 23 --c 0.1 --rho 220
+Ejemplos:
+  python tefsm_figuras.py pseudo     datos/150M_L89.csv
+  python tefsm_figuras.py vertical   datos/150M_L89.csv --punto 85
+  python tefsm_figuras.py horizontal datos/150M_L89.csv
+  python tefsm_figuras.py inversion  datos/150M_L89.csv --punto 88
 
-  # Figuras 3 y 4 de Gomo y Ngobe (perfil vertical y horizontal de la EPD, datos del equipo)
-  python tefsm_figuras.py vertical   150M_L89.csv --punto 85 --agua 25,45
-  python tefsm_figuras.py horizontal 150M_L89.csv --zona 10,18
-
-  # Archivos de ejemplo sinteticos para probar el formato
-  python tefsm_figuras.py demo --salida ejemplos
-
-FORMATO DE ENTRADA (formato "largo": una fila por lectura)
-----------------------------------------------------------
-  Figuras 2, 4, 6  -> columnas:  y_m, f_hz, ey_mv  [, fase_deg]
-       y_m      posicion sobre el perfil (m)
-       f_hz     frecuencia (Hz)
-       ey_mv    |Ey| en mV/m  (modulo del campo electrico)
-       fase_deg fase de Ey en grados (opcional; solo para el panel c de la fig. 6)
-
-  Figura 13        -> columnas:  y_m, f_hz, dv_mv  [, rho_ohm_m]
-       dv_mv      diferencia de potencial dV medida (mV)
-       rho_ohm_m  resistividad aparente (opcional; si falta se usa --rho)
-
-  Tambien se aceptan los alias: y/x/pos, f/freq/frecuencia, ey/e/modulo/mv,
-  phase/fase, dv/v/delta_v, rho/resistividad.
+El rango de profundidad (100, 150 o 300 m) se toma del nombre del archivo (150M_...) o de --prof.
+Las figuras se guardan en figuras/ (--salida). Use -h en cada comando para ver sus opciones.
 """
 import argparse
 import os
@@ -487,46 +471,6 @@ def guardar(fig, args):
     print("Figura guardada en", ruta)
 
 
-# ----------------------------------------------------------------------------
-# Datos sinteticos de ejemplo (solo para probar el programa, NO son del articulo)
-# ----------------------------------------------------------------------------
-def demo(args):
-    os.makedirs(args.salida, exist_ok=True)
-    y = np.concatenate([np.arange(-100, -20, 1.0), np.arange(-20, 20.5, 0.5), np.arange(21, 101, 1.0)])
-    lgf = np.arange(1.0, 4.0001, 0.05)
-    rows = []
-    for l in lgf:
-        base = 0.2 * 10 ** (1.2 * (l - 1.0) / 3 * 2.0) * 1.0  # crece con f
-        base = 0.5 + 18.5 * ((l - 1.0) / 3.0) ** 2.2
-        for yy in y:
-            plato = 1 - 0.45 * np.exp(-(yy / 4.0) ** 2)            # fig. 2 (estrecho)
-            esfera = 1 - 0.17 * np.exp(-(yy / 45.0) ** 2)           # fig. 4 (ancho)
-            fase = 45 + 6 * (1 - np.exp(-(yy / 40.0) ** 2)) * (4 - l) / 3 - 1
-            rows.append((yy, 10 ** l, base * plato, base * esfera,
-                         base * plato * esfera, fase))
-    d = pd.DataFrame(rows, columns=["y_m", "f_hz", "fig2", "fig4", "fig6", "fase_deg"])
-    for k in ("fig2", "fig4"):
-        d[["y_m", "f_hz"]].assign(ey_mv=d[k]).to_csv(
-            os.path.join(args.salida, f"datos_{k}.csv"), index=False)
-    d[["y_m", "f_hz", "fase_deg"]].assign(ey_mv=d["fig6"])[
-        ["y_m", "f_hz", "ey_mv", "fase_deg"]].to_csv(
-        os.path.join(args.salida, "datos_fig6.csv"), index=False)
-
-    # Fig. 13: 40 frecuencias entre 12 y 5000 Hz, y = 15..29 m, anomalia en 23 m
-    ys = np.arange(15, 30, 1.0)
-    fs = np.logspace(np.log10(12), np.log10(5000), 40)
-    rng = np.random.default_rng(0)
-    r = []
-    for fq in fs:
-        for yy in ys:
-            v = 3 + 30 * (np.log10(fq) - 1) / 2.7
-            v *= 1 - 0.8 * np.exp(-((yy - 23.5) / 2.5) ** 2) * (0.4 + 0.6 * np.exp(-((np.log10(fq) - 1.8) / 0.4) ** 2))
-            r.append((yy, fq, max(v * (1 + 0.03 * rng.standard_normal()), 0.3)))
-    pd.DataFrame(r, columns=["y_m", "f_hz", "dv_mv"]).to_csv(
-        os.path.join(args.salida, "datos_fig13_L8.csv"), index=False)
-    print("Ejemplos escritos en", args.salida)
-
-
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -605,12 +549,8 @@ def main():
     rs.add_argument("--rho-max", dest="rho_max", type=float, default=500.0, help="resistividad asignada a la EPD maxima (ohm.m)")
     rs.set_defaults(fn=figura_inversion)
 
-    c = sub.add_parser("demo", help="genera CSV sinteticos de ejemplo")
-    c.add_argument("--salida", default="ejemplos")
-    c.set_defaults(fn=demo)
-
     args = p.parse_args()
-    if args.cmd != "demo" and args.nombre is None:
+    if args.nombre is None:
         args.nombre = os.path.splitext(os.path.basename(args.archivo))[0]
     args.fn(args)
 
