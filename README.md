@@ -32,17 +32,21 @@ Con 22 electrodos a 1.5 m se obtienen 18 puntos (`--dx 1.5`). `freq01` es el can
 | `modulo` | Figuras 2, 4 y 6 de Yang et al. (|Ey| y fase; CSV con `y_m, f_hz, ey_mv[, fase_deg]`; vienen de una simulación 3D, no del equipo) |
 
 ```
-python tefsm_figuras.py pseudo     datos/150M_L89.csv
+python tefsm_figuras.py todas      datos/150M_L89.csv     # las cinco figuras en figuras/L89_150m/
+python tefsm_figuras.py todas      datos/300M_L19.csv     # las cinco figuras en figuras/L19_300m/
+
+python tefsm_figuras.py pseudo     datos/150M_L89.csv     # o una sola figura
 python tefsm_figuras.py vertical   datos/150M_L89.csv --punto 85
 python tefsm_figuras.py horizontal datos/150M_L89.csv
 python tefsm_figuras.py inversion  datos/300M_L19.csv --punto 88
 ```
 
-Cada comando guarda sus PNG en `figuras/` (carpeta de salida: `--salida`) e imprime la ruta completa de cada archivo; los nombres por defecto son `fig13_*`, `fig3_vertical_*`, `fig4_horizontal_*`, `SP_Inversion_*` y `Modelo_Resistividad_*`. Por defecto no se abre ninguna ventana: añada `--mostrar` para ver la figura en pantalla además de guardarla.
+Cada comando guarda sus PNG en `figuras/<L##_###m>/`, según el nombre del archivo (otra carpeta: `--salida`) e imprime la ruta completa de cada archivo; los nombres por defecto son `fig13_*`, `fig3_vertical_*`, `fig4_horizontal_*`, `SP_Inversion_*` y `Modelo_Resistividad_*`. Por defecto no se abre ninguna ventana: añada `--mostrar` para ver la figura en pantalla además de guardarla.
 
 Opciones útiles (`-h` en cada comando muestra todas):
 - `--umbral` (0.1 mV): lecturas menores se consideran ruido o canal muerto.
 - `pseudo`: `--zk x` marca un sondeo; `--escala-h ec12` usa hs = c·503·√(ρ/f) del artículo en lugar de la profundidad lineal.
+- `vertical` e `inversion`: sin `--punto`/`--x` usan la misma estación (la de mayor anomalía baja).
 - `vertical`: `--agua 25,45` marca venas de agua; `--litologia archivo.csv` (columnas `tope_m,base_m,nombre`) agrega la columna litológica.
 - `horizontal`: `--zona x1,x2` recuadra una zona (p. ej. de ruido); `--cada N` / `--profundidades`.
 - `inversion`: `--punto N` o `--x m`; sin ellos usa la estación de mayor anomalía baja (sin contar los bordes).

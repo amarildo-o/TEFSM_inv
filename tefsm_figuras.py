@@ -84,8 +84,9 @@ def leer_equipo(path, args):
             sys.exit(f"Se dieron {len(fr)} frecuencias pero el archivo tiene {nf} columnas freqNN")
     else:
         fr = np.logspace(np.log10(args.fmax), np.log10(args.fmin), nf)
-        print(f"AVISO: no se dieron frecuencias; se asumen {nf} valores log-espaciados "
-              f"entre {args.fmin:g} y {args.fmax:g} Hz (freq01 = la mayor, la mas somera). Use --freqs.")
+        if args.escala_h == "ec12":
+            print(f"AVISO: no se dieron frecuencias; se asumen {nf} valores log-espaciados "
+                  f"entre {args.fmin:g} y {args.fmax:g} Hz (freq01 = la mayor, la mas somera). Use --freqs.")
     y = (df["n"].astype(float) - df["n"].astype(float).min()) * args.dx + args.y0
     if args.y_es_n:
         y = df["n"].astype(float)
@@ -126,6 +127,13 @@ ESTILOS = {1.1: (":", None), 1.4: ("-", None), 1.6: (":", "^"),
 # ----------------------------------------------------------------------------
 # Figuras 2, 4, 6
 # ----------------------------------------------------------------------------
+def carpeta_salida(path):
+    """'150M_L89.csv' -> 'figuras/L89_150m' (una carpeta por archivo de entrada)."""
+    m = re.match(r"(\d+)\s*M_L(\d+)", os.path.splitext(os.path.basename(path))[0], re.I)
+    return os.path.join("figuras", f"L{m.group(2)}_{m.group(1)}m") if m else \
+        os.path.join("figuras", os.path.splitext(os.path.basename(path))[0])
+
+
 def etiqueta_csv(path):
     """'150M_L89.csv' -> 'L89 a 150m' (registro y rango de profundidad del nombre del archivo)."""
     nombre = os.path.basename(path)
@@ -297,9 +305,26 @@ def matriz_equipo(args):
     return n, y, h, V
 
 
+def estacion_auto(V, umbral=0.1, umbral_anomalia=0.15):
+    """Indice del punto con mayor anomalia de EPD BAJA respecto a la mediana lateral (sin los bordes)."""
+    import warnings
+    npts = V.shape[1]
+    valido = V > umbral
+    with np.errstate(divide="ignore", invalid="ignore"):
+        L = np.where(valido, np.log10(np.where(valido, V, 1.0)), np.nan)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        med = np.nanmedian(L, axis=1, keepdims=True)       # canales sin datos validos -> NaN
+    A = L - med
+    bajo = np.where(np.isnan(A), 0.0, np.minimum(A + umbral_anomalia, 0.0))
+    score = bajo.sum(axis=0) / np.maximum(valido.sum(axis=0), 1)    # < 0 = zona baja
+    lo, hi = (1, npts - 1) if npts > 4 else (0, npts)
+    return lo + int(np.argmin(score[lo:hi]))
+
+
 def figura_vertical(args):
     n, y, h, V = matriz_equipo(args)
-    puntos = [float(p) for p in args.punto.split(",")] if args.punto else [n[0]]
+    puntos = [float(p) for p in args.punto.split(",")] if args.punto else [n[estacion_auto(V, args.umbral, args.umbral_anomalia)]]
     fig = plt.figure(figsize=(7.5, 8))
     litologia = None
     if args.litologia:
@@ -341,7 +366,11 @@ def figura_vertical(args):
         axl.xaxis.tick_top()
         handles = [plt.Rectangle((0, 0), 1, 1, fc=c, ec="k") for c in paleta.values()]
         fig.legend(handles, list(paleta), loc="lower center", ncol=len(paleta), fontsize=8, frameon=False)
-    fig.suptitle(f"Perfil vertical de EPD\n{etiqueta_csv(args.archivo)}", fontweight="bold")
+    est = ""
+    if len(puntos) == 1:
+        jj = int(np.argmin(np.abs(n - puntos[0])))
+        est = f"\nx = {y[jj]:g} m (N = {n[jj]:g})"
+    fig.suptitle(f"Perfil vertical de EPD\n{etiqueta_csv(args.archivo)}{est}", fontweight="bold")
     guardar(fig, args)
 
 
@@ -388,27 +417,16 @@ def figura_horizontal(args):
 #     profundidad (sin contar los bordes del perfil).
 # ----------------------------------------------------------------------------
 def figura_inversion(args):
-    import warnings
     from scipy import ndimage
 
     n, x, h, V = matriz_equipo(args)
-    nf, npts = V.shape
     valido = V > args.umbral
-    with np.errstate(divide="ignore", invalid="ignore"):
-        L = np.where(valido, np.log10(np.where(valido, V, 1.0)), np.nan)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)
-        med = np.nanmedian(L, axis=1, keepdims=True)       # canales sin datos validos -> NaN
-    A = L - med
-    bajo = np.where(np.isnan(A), 0.0, np.minimum(A + args.umbral_anomalia, 0.0))
-    score = bajo.sum(axis=0) / np.maximum(valido.sum(axis=0), 1)    # < 0 = zona baja
     if args.x is not None:
         j = int(np.argmin(np.abs(x - args.x)))
     elif args.punto is not None:
         j = int(np.argmin(np.abs(n - args.punto)))
     else:
-        lo, hi = (1, npts - 1) if npts > 4 else (0, npts)
-        j = lo + int(np.argmin(score[lo:hi]))
+        j = estacion_auto(V, args.umbral, args.umbral_anomalia)
     xs = x[j]
 
     obs = valido[:, j]
@@ -487,7 +505,7 @@ def main():
 
     def comun(sp):
         sp.add_argument("--nombre", default=None, help="nombre del PNG de salida (sin extension)")
-        sp.add_argument("--salida", default="figuras", help="carpeta de salida")
+        sp.add_argument("--salida", default=None, help="carpeta de salida (def.: figuras/L89_150m, segun el archivo)")
         sp.add_argument("--dpi", type=int, default=200)
         sp.add_argument("--mostrar", action="store_true", help="abrir las figuras en una ventana (ademas de guardarlas)")
 
@@ -531,11 +549,14 @@ def main():
         sp.add_argument("--dx", type=float, default=1.5, help="metros entre puntos N (def. 1.5)")
         sp.add_argument("--y0", type=float, default=0.0, help="posicion y (m) del menor N")
         sp.add_argument("--linea", type=int, default=None, help="filtrar por registro L del equipo")
+        sp.add_argument("--umbral", type=float, default=0.1, help="lecturas <= umbral (mV) = ruido/canal muerto (def. 0.1)")
+        sp.add_argument("--umbral-anomalia", dest="umbral_anomalia", type=float, default=0.15,
+                        help="caida (log10) bajo la mediana lateral para elegir la estacion (def. 0.15 = -30%%)")
         comun(sp)
 
     v = sub.add_parser("vertical", help="Fig. 3 (Gomo y Ngobe): perfil vertical de EPD vs profundidad")
     comun_eq(v)
-    v.add_argument("--punto", default=None, help="N de la estacion (o varios separados por coma); def. el primero")
+    v.add_argument("--punto", default=None, help="N de la estacion (o varios separados por coma); def.: la de mayor anomalia baja")
     v.add_argument("--litologia", default=None, help="CSV con columnas tope_m, base_m, nombre")
     v.add_argument("--agua", default=None, help="profundidades (m) de venas de agua, separadas por coma")
     v.set_defaults(fn=figura_vertical)
@@ -551,22 +572,47 @@ def main():
     comun_eq(rs)
     rs.add_argument("--punto", type=float, default=None, help="N de la estacion (def.: la de mayor anomalia baja)")
     rs.add_argument("--x", type=float, default=None, help="posicion x (m) de la estacion (alternativa a --punto)")
-    rs.add_argument("--umbral", type=float, default=0.1, help="lecturas <= umbral (mV) = ruido/canal muerto (def. 0.1)")
-    rs.add_argument("--umbral-anomalia", dest="umbral_anomalia", type=float, default=0.15,
-                    help="caida (log10) bajo la mediana lateral para elegir la estacion (def. 0.15 = -30%%)")
     rs.add_argument("--lam", type=float, default=3.0, help="regularizacion del ajuste (def. 3)")
     rs.add_argument("--factor-suavizado", dest="factor_suavizado", type=float, default=3.0, help="sigma del suavizado (canales)")
     rs.add_argument("--rho-min", dest="rho_min", type=float, default=5.0, help="resistividad asignada a la EPD minima (ohm.m)")
     rs.add_argument("--rho-max", dest="rho_max", type=float, default=500.0, help="resistividad asignada a la EPD maxima (ohm.m)")
     rs.set_defaults(fn=figura_inversion)
 
+    def completar(a):
+        if not a.mostrar:
+            plt.switch_backend("Agg")        # sin ventana: solo se guardan los PNG
+        if a.salida is None:
+            a.salida = carpeta_salida(a.archivo)
+        if a.nombre is None:                 # nombre por defecto distinto para cada comando
+            prefijo = {"pseudo": "fig13_", "vertical": "fig3_vertical_", "horizontal": "fig4_horizontal_",
+                       "modulo": "modulo_"}.get(a.cmd, "")
+            a.nombre = prefijo + os.path.splitext(os.path.basename(a.archivo))[0]
+
+    def figura_todas(a):
+        """Genera todas las figuras de un archivo del equipo en su carpeta (figuras/L89_150m)."""
+        base = [a.archivo, "--salida", a.salida, "--dpi", str(a.dpi), "--dx", str(a.dx), "--y0", str(a.y0),
+                "--umbral", str(a.umbral)]
+        if a.prof:
+            base += ["--prof", str(a.prof)]
+        if a.linea is not None:
+            base += ["--linea", str(a.linea)]
+        if a.mostrar:
+            base += ["--mostrar"]
+        for c in ("pseudo", "vertical", "horizontal", "inversion"):
+            extra = ["--punto", str(a.punto)] if (a.punto is not None and c in ("vertical", "inversion")) else []
+            if c != "pseudo":                # pseudo no usa la seleccion de estacion
+                extra += ["--umbral-anomalia", str(a.umbral_anomalia)]
+            sa = p.parse_args([c] + base + extra)
+            completar(sa)
+            sa.fn(sa)
+
+    t = sub.add_parser("todas", help="todas las figuras de un archivo del equipo, en su carpeta (figuras/L89_150m)")
+    comun_eq(t)
+    t.add_argument("--punto", type=float, default=None, help="N de la estacion para vertical e inversion (def.: la de mayor anomalia baja)")
+    t.set_defaults(fn=figura_todas)
+
     args = p.parse_args()
-    if not args.mostrar:
-        plt.switch_backend("Agg")        # sin ventana: solo se guardan los PNG
-    if args.nombre is None:       # nombre por defecto distinto para cada comando
-        prefijo = {"pseudo": "fig13_", "vertical": "fig3_vertical_", "horizontal": "fig4_horizontal_",
-                   "modulo": "modulo_"}.get(args.cmd, "")
-        args.nombre = prefijo + os.path.splitext(os.path.basename(args.archivo))[0]
+    completar(args)
     args.fn(args)
 
 
