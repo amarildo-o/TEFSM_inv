@@ -127,10 +127,10 @@ ESTILOS = {1.1: (":", None), 1.4: ("-", None), 1.6: (":", "^"),
 # Figuras 2, 4, 6
 # ----------------------------------------------------------------------------
 def etiqueta_csv(path):
-    """'150M_L89.csv' -> '150M_L89.csv: L89 a 150m' (registro y rango de profundidad del nombre)."""
+    """'150M_L89.csv' -> 'L89 a 150m' (registro y rango de profundidad del nombre del archivo)."""
     nombre = os.path.basename(path)
     m = re.match(r"(\d+)\s*M_L(\d+)", os.path.splitext(nombre)[0], re.I)
-    return f"{nombre}: L{m.group(2)} a {m.group(1)}m" if m else nombre
+    return f"L{m.group(2)} a {m.group(1)}m" if m else nombre
 
 
 def figura_modulo(args):
