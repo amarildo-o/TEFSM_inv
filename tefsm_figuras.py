@@ -16,6 +16,10 @@ USO
   # Figura 13 (pseudo-seccion normalizada de dV, 40 frecuencias)
   python tefsm_figuras.py pseudo  datos_L8.csv --nombre fig13b --zk 23 --c 0.1 --rho 220
 
+  # Figuras 3 y 4 de Gomo y Ngobe (perfil vertical y horizontal de la EPD, datos del equipo)
+  python tefsm_figuras.py vertical   150M_L93.csv --punto 85 --agua 25,45
+  python tefsm_figuras.py horizontal 150M_L93.csv --zona 10,18
+
   # Archivos de ejemplo sinteticos para probar el formato
   python tefsm_figuras.py demo --salida ejemplos
 
@@ -269,6 +273,114 @@ def figura_pseudo(args):
     guardar(fig, args)
 
 
+# ----------------------------------------------------------------------------
+# Figuras 3 y 4 de: Gomo & Ngobe, "Telluric Electric Frequency Selection Method (TEFSM) in
+# Geophysical Groundwater Exploration: Emerging Issues", en Aquifers - Advances in
+# Hydrogeology, IntechOpen, DOI 10.5772/intechopen.1013979
+#   Fig. 3: perfil VERTICAL de la EPD (mV) contra la profundidad en una estacion,
+#           con columna litologica y venas de agua opcionales.
+#   Fig. 4: perfil HORIZONTAL de la EPD (escala log) con una curva por profundidad.
+# Entrada: formato del equipo (L, N, freqNN), igual que la figura 13.
+# ----------------------------------------------------------------------------
+def matriz_equipo(args):
+    """Devuelve y (m, por punto N), h (m, por canal) y V[canal, punto] en mV, sin descartar nada."""
+    ext = os.path.splitext(args.archivo)[1].lower()
+    df = pd.read_excel(args.archivo) if ext in (".xlsx", ".xls") else pd.read_csv(args.archivo, sep=None, engine="python")
+    df.columns = [str(c).strip().lower() for c in df.columns]
+    cols = sorted(c for c in df.columns if c.startswith("freq") and c[4:].isdigit())
+    if not cols:
+        sys.exit("Estas figuras requieren el formato del equipo (columnas L, N, freq01..freqNN)")
+    if args.linea is not None:
+        df = df[df["l"] == args.linea]
+    df = df.sort_values("n")
+    n = df["n"].astype(float).values
+    y = (n - n.min()) * args.dx + args.y0
+    V = df[cols].apply(pd.to_numeric, errors="coerce").values.T
+    nf = V.shape[0]
+    prof = args.prof
+    if prof is None:
+        m = re.search(r"(\d+)\s*m", os.path.basename(args.archivo), re.I)
+        prof = float(m.group(1)) if m else 150.0
+    h = prof * np.arange(1, nf + 1) / nf          # profundidad lineal con el canal (como el equipo)
+    return n, y, h, V
+
+
+def figura_vertical(args):
+    n, y, h, V = matriz_equipo(args)
+    puntos = [float(p) for p in args.punto.split(",")] if args.punto else [n[0]]
+    fig = plt.figure(figsize=(7.5, 8))
+    litologia = None
+    if args.litologia:
+        litologia = pd.read_csv(args.litologia)
+        litologia.columns = [c.strip().lower() for c in litologia.columns]   # tope_m, base_m, nombre
+        gs = fig.add_gridspec(1, 2, width_ratios=[2.2, 1], wspace=0.02)
+        ax = fig.add_subplot(gs[0])
+        axl = fig.add_subplot(gs[1], sharey=ax)
+    else:
+        ax = fig.add_subplot(111)
+    for p in puntos:
+        j = int(np.argmin(np.abs(n - p)))
+        ax.plot(V[:, j], h, color="#e8603c", lw=1.4, marker="D", ms=4, mfc="#c8102e",
+                mec="k", mew=0.6, label=f"N = {n[j]:g}  (y = {y[j]:g} m)")
+    for a in (args.agua.split(",") if args.agua else []):
+        ax.axhline(float(a), color="k", ls="--", lw=1.4)
+    ax.set_ylim(h.max() * 1.02, 0)
+    ax.set_xlim(0, np.nanmax(V[:, [int(np.argmin(np.abs(n - p))) for p in puntos]]) * 1.1)
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position("top")
+    ax.set_xlabel("Diferencia de potencial eléctrico (mV)")
+    ax.set_ylabel("Profundidad bajo la superficie (m)")
+    ax.grid(color="#bbb", lw=0.4)
+    ax.grid(which="major", color="#555", lw=0.6)
+    ax.minorticks_on()
+    if len(puntos) > 1:
+        ax.legend(loc="lower right", fontsize=8)
+    if litologia is not None:
+        axl.set_xlim(0, 1)
+        paleta = {}
+        for i, r in enumerate(litologia.itertuples()):
+            col = paleta.setdefault(r.nombre, plt.get_cmap("Set2")(len(paleta) % 8))
+            axl.add_patch(plt.Rectangle((0, r.tope_m), 1, r.base_m - r.tope_m, fc=col, ec="k", lw=0.6,
+                                        hatch=["", "..", "////", "xx", "\\\\"][list(paleta).index(r.nombre) % 5]))
+        axl.set_title("Litología", fontsize=9)
+        axl.set_xticks([])
+        axl.yaxis.tick_right()
+        axl.tick_params(labelright=False)
+        axl.xaxis.tick_top()
+        handles = [plt.Rectangle((0, 0), 1, 1, fc=c, ec="k") for c in paleta.values()]
+        fig.legend(handles, list(paleta), loc="lower center", ncol=len(paleta), fontsize=8, frameon=False)
+    args.nombre = args.nombre or "fig3_perfil_vertical"
+    guardar(fig, args)
+
+
+def figura_horizontal(args):
+    n, y, h, V = matriz_equipo(args)
+    if args.profundidades:
+        idx = [int(np.argmin(np.abs(h - float(d)))) for d in args.profundidades.split(",")]
+    else:
+        idx = list(range(args.cada - 1, V.shape[0], args.cada))
+    fig, ax = plt.subplots(figsize=(10, 6))
+    cm = plt.get_cmap("tab20")
+    for k, i in enumerate(idx):
+        v = np.where(V[i] > 0, V[i], np.nan)           # la escala log no admite ceros
+        ax.plot(y, v, lw=1.2, color=cm(k % 20), label=f"{h[i]:.0f} m")
+    ax.set_yscale("log")
+    pos = V[V > 0]
+    ax.set_ylim(10 ** np.floor(np.log10(pos.min())), pos.max() * 1.5)
+    ax.set_xlim(y.min(), y.max())
+    ax.set_xlabel("Distancia horizontal (m)")
+    ax.set_ylabel("Diferencia de potencial eléctrico (mV)")
+    ax.grid(which="both", color="#ccc", lw=0.4)
+    if args.zona:
+        z = [float(t) for t in args.zona.split(",")]
+        y0, y1 = ax.get_ylim()
+        zy0, zy1 = (z[2], z[3]) if len(z) == 4 else (y0, y1)
+        ax.add_patch(plt.Rectangle((z[0], zy0), z[1] - z[0], zy1 - zy0, fill=False, ls="--", ec="k", lw=1.4))
+    ax.legend(ncol=3, fontsize=8, loc="lower right", framealpha=0.9)
+    args.nombre = args.nombre or "fig4_perfil_horizontal"
+    guardar(fig, args)
+
+
 def guardar(fig, args):
     os.makedirs(args.salida, exist_ok=True)
     ruta = os.path.join(args.salida, f"{args.nombre}.png")
@@ -358,6 +470,29 @@ def main():
                         "evita que dV_min sea ~0 en la ec. 13")
     comun(b)
     b.set_defaults(fn=figura_pseudo)
+
+    def comun_eq(sp):
+        sp.add_argument("archivo")
+        sp.add_argument("--prof", type=float, default=None, choices=[100, 150, 300],
+                        help="rango de profundidad del equipo (m); por defecto se lee del nombre del archivo")
+        sp.add_argument("--dx", type=float, default=1.5, help="metros entre puntos N (def. 1.5)")
+        sp.add_argument("--y0", type=float, default=0.0, help="posicion y (m) del menor N")
+        sp.add_argument("--linea", type=int, default=None, help="filtrar por registro L del equipo")
+        comun(sp)
+
+    v = sub.add_parser("vertical", help="Fig. 3 (Gomo y Ngobe): perfil vertical de EPD vs profundidad")
+    comun_eq(v)
+    v.add_argument("--punto", default=None, help="N de la estacion (o varios separados por coma); def. el primero")
+    v.add_argument("--litologia", default=None, help="CSV con columnas tope_m, base_m, nombre")
+    v.add_argument("--agua", default=None, help="profundidades (m) de venas de agua, separadas por coma")
+    v.set_defaults(fn=figura_vertical)
+
+    hz = sub.add_parser("horizontal", help="Fig. 4 (Gomo y Ngobe): perfil horizontal de EPD (log), una curva por profundidad")
+    comun_eq(hz)
+    hz.add_argument("--profundidades", default=None, help="profundidades (m) a graficar, separadas por coma")
+    hz.add_argument("--cada", type=int, default=2, help="si no hay --profundidades: 1 de cada N canales (def. 2)")
+    hz.add_argument("--zona", default=None, help="recuadro a marcar: x1,x2[,ymin,ymax] (p. ej. zona de ruido)")
+    hz.set_defaults(fn=figura_horizontal)
 
     c = sub.add_parser("demo", help="genera CSV sinteticos de ejemplo")
     c.add_argument("--salida", default="ejemplos")

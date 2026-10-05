@@ -39,6 +39,22 @@ python tefsm_figuras.py pseudo ejemplos/150M_L93.csv --freqs frecuencias.txt --d
 
 `python tefsm_figuras.py demo --salida ejemplos` genera CSV sintéticos de prueba (no son datos del artículo).
 
+## Figuras 3 y 4 (perfil vertical y horizontal de la EPD)
+
+Basadas en las figuras 3 y 4 de Gomo y Ngobe, *Telluric Electric Frequency Selection Method (TEFSM) in Geophysical Groundwater Exploration: Emerging Issues*, en *Aquifers – Advances in Hydrogeology* (IntechOpen, https://doi.org/10.5772/intechopen.1013979). Usan los datos del equipo (formato `L, N, freqNN`); la profundidad de cada canal es lineal hasta el rango configurado (100, 150 o 300 m).
+
+```
+# Fig. 3: EPD (mV) contra profundidad en una estacion, con litologia y venas de agua opcionales
+python tefsm_figuras.py vertical ejemplos/150M_L93.csv --punto 85 --agua 25,45 --litologia ejemplos/litologia_ejemplo.csv
+
+# Fig. 4: EPD (escala log) contra distancia horizontal, una curva por profundidad
+python tefsm_figuras.py horizontal ejemplos/150M_L93.csv --zona 9,15
+```
+
+- `vertical`: `--punto N` (uno o varios N separados por coma), `--agua` (profundidades de venas de agua), `--litologia` (CSV `tope_m,base_m,nombre`; `ejemplos/litologia_ejemplo.csv` es un ejemplo inventado, no es la litología del sitio).
+- `horizontal`: `--profundidades 10,20,…` o `--cada N` (1 de cada N canales, def. 2); `--zona x1,x2[,ymin,ymax]` marca con un recuadro, por ejemplo una zona afectada por ruido. Las lecturas ≤ 0 no se dibujan (escala logarítmica).
+- Según ese capítulo, la EPD que mide el equipo no se convierte en resistividad; refleja el efecto de apantallamiento del subsuelo.
+
 ## Figuras de ejemplo
 
 En `ejemplos/figuras/` están los PNG generados con los CSV de `ejemplos/`
@@ -46,6 +62,7 @@ En `ejemplos/figuras/` están los PNG generados con los CSV de `ejemplos/`
 
 - `fig2.png`, `fig4.png`, `fig6.png`: módulo de Ey (curvas y pseudo-sección; fig6 incluye la fase).
 - `fig13_sintetico.png`: pseudo-sección normalizada con datos sintéticos.
+- `fig3_perfil_vertical.png` y `fig4_perfil_horizontal.png`: figuras 3 y 4 de Gomo y Ngobe con los datos del equipo.
 - `fig13_150M_L93.png`: pseudo-sección con los datos reales del equipo (`150M_L93.csv`; 18 puntos cada 1.5 m, profundidad lineal 0–150 m).
 
 Para regenerarlas: `python tefsm_figuras.py modulo ejemplos/datos_fig2.csv --nombre fig2 --salida ejemplos/figuras`
