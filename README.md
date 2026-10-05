@@ -55,4 +55,24 @@ Opciones útiles (`-h` en cada comando muestra todas):
 
 Gomo y Ngobe indican que los valores del equipo no se pueden convertir en resistividad. Por eso `Modelo_Resistividad_*.png` es una **aproximación empírica y cualitativa**, no una inversión física:
 - *Calculado*: ajuste regularizado (Tikhonov, 2.ª derivada) de la EPD observada contra la profundidad (`--lam`); *Suavizado*: filtro gaussiano (`--factor-suavizado`). RMS = diferencia entre el ajuste y las lecturas.
-- *Resistividad*: mapeo log-lineal de la EPD ajustada al intervalo `--rho-min 5` … `--rho-max 500` Ω·m (más EPD, más resistividad). Calíbrelo con un sondeo o con resistividad eléctrica local.
+- *Etiquetas y recuadros*: el modelo muestra ~8 valores de resistividad repartidos por la curva (`--etiquetas N`: extremos, máximos y mínimos locales y profundidades regulares, sin encimarse). Un recuadro fucsia marca un tramo donde la resistividad baja respecto a la capa anterior, por lo menos 15 % (`--prominencia 0.06`, en log10); si la curva es monótona no aparece ninguno. En la pseudo-sección (`pseudo`) los recuadros fucsia son de dos tipos: trazo **continuo** grueso = los mismos tramos de menor resistividad de la estación analizada (la línea vertical negra); trazo **discontinuo** = zonas de EPD baja respecto a la mediana lateral a cada profundidad (`--umbral-anomalia`, `--min-celdas`). Solo se dibujan con datos del equipo y profundidad lineal.
+- *Resistividad*: mapeo log-lineal de la EPD ajustada al intervalo `--rho-min 5` … `--rho-max 5000` Ω·m (más EPD, más resistividad). Calíbrelo con un sondeo o con resistividad eléctrica local.
+
+### Valores de referencia en Guatemala (aportados por el equipo de campo)
+
+Resistividades aparentes típicas, útiles para elegir `--rho-min` y `--rho-max` (no están verificadas aquí contra sus fuentes):
+
+| Zona / material | Resistividad (Ω·m) |
+|---|---|
+| Pómez y cenizas secas (superficiales) | 500 – más de 2000 |
+| Flujos piroclásticos y toba, saturados o semisaturados | 60 – 250 |
+| Basaltos, andesitas y lavas masivas y secas | > 1000 |
+| Lavas fracturadas y saturadas (recarga hídrica) | 150 – 400 |
+| Rellenos aluviales y suelos areno-arcillosos | 30 – 150 |
+| Sedimentos lacustres y arcillas saturadas | 5 – 30 |
+| Calizas kársticas densas y secas | 800 – más de 5000 |
+| Calizas con cavernas colmatadas o acuífero kárstico | 80 – 200 |
+| Esquistos, gneises y serpentinitas sanos | > 800 |
+| Esquistos meteorizados (horizontes arcillosos) | 40 – 120 |
+
+Los valores por defecto (5 y 5000 Ω·m) cubren desde las arcillas lacustres hasta las calizas y rocas metamórficas sanas. Si en un sitio el rango esperado es más estrecho, ajústelos (por ejemplo `--rho-min 30 --rho-max 2500` en tierras altas volcánicas).

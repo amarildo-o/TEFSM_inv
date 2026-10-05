@@ -219,6 +219,40 @@ def figura_modulo(args):
 #   K_i = log10(dV_i / dV_min)        (ec. 13)
 #   h_s = c * 503 * sqrt(rho / f)     (ec. 12)
 # ----------------------------------------------------------------------------
+def recuadros_pseudo(args, ax):
+    """Recuadros fucsia sobre la pseudo-seccion (solo datos del equipo, profundidad lineal):
+      - trazo continuo grueso: tramos de menor resistividad de la estacion analizada (los mismos
+        recuadros del modelo de resistividad);
+      - trazo discontinuo: zonas de EPD baja respecto a la mediana lateral a cada profundidad."""
+    from scipy import ndimage
+    n, x, h, V = matriz_equipo(args)
+    paso = h[1] - h[0]
+    # zonas de EPD baja (anomalias laterales)
+    valido = V > args.umbral
+    with np.errstate(divide="ignore", invalid="ignore"):
+        L = np.where(valido, np.log10(np.where(valido, V, 1.0)), np.nan)
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        A = L - np.nanmedian(L, axis=1, keepdims=True)
+    lab, nl = ndimage.label(np.nan_to_num(A, nan=0.0) < -args.umbral_anomalia)
+    for k in range(1, nl + 1):
+        ii, jj = np.where(lab == k)
+        if len(ii) < args.min_celdas:
+            continue
+        x0, x1 = x[jj.min()] - args.dx / 2, x[jj.max()] + args.dx / 2
+        h0, h1 = max(h[ii.min()] - paso / 2, 0.0), h[ii.max()] + paso / 2
+        ax.add_patch(plt.Rectangle((x0, -h1), x1 - x0, h1 - h0, fill=False, ec=COLOR_RECUADRO, ls="--", lw=1.8, zorder=5))
+    # tramos de menor resistividad de la estacion
+    j = elegir_estacion(args, n, x, V)
+    hv, vv, m, _, _, _ = ajuste_estacion(args, V, h, j)
+    _, bordes, tramos = modelo_resistividad(args, h, hv, m)
+    for i0, i1 in tramos:
+        ax.add_patch(plt.Rectangle((x[j] - args.dx / 2, -bordes[i1 + 1]), args.dx, bordes[i1 + 1] - bordes[i0],
+                                   fill=False, ec=COLOR_RECUADRO, lw=3, zorder=6))
+    ax.axvline(x[j], color="k", lw=1, alpha=0.6, zorder=4)
+
+
 def figura_pseudo(args):
     cab = pd.read_csv(args.archivo, nrows=0, sep=None, engine="python") \
         if not args.archivo.lower().endswith((".xlsx", ".xls")) else pd.read_excel(args.archivo, nrows=0)
@@ -280,6 +314,8 @@ def figura_pseudo(args):
     ax.set_ylim(-hmax, 0)
     fig.colorbar(cf, ax=ax, orientation="horizontal", pad=0.04, shrink=0.8,
                  label=r"$\log_{10}(\Delta V/\Delta V_{min})$")
+    if "canal" in df.columns and args.escala_h == "lineal":
+        recuadros_pseudo(args, ax)
     ax.set_title(f"Pseudo-sección normalizada\n{etiqueta_csv(args.archivo)}", fontweight="bold", pad=42)
     guardar(fig, args)
 
@@ -426,28 +462,58 @@ def figura_horizontal(args):
 #   * Estacion por defecto: la de mayor anomalia de EPD BAJA respecto a la mediana lateral a cada
 #     profundidad (sin contar los bordes del perfil).
 # ----------------------------------------------------------------------------
-def figura_inversion(args):
+COLOR_RECUADRO = "#d81b9a"     # fucsia
+
+
+def elegir_estacion(args, n, x, V):
+    """Indice del punto a analizar: --x, --punto o, por defecto, el de mayor anomalia baja."""
+    if getattr(args, "x", None) is not None:
+        return int(np.argmin(np.abs(x - args.x)))
+    if getattr(args, "punto", None) is not None:
+        return int(np.argmin(np.abs(n - float(args.punto))))
+    return estacion_auto(V, args.umbral, args.umbral_anomalia)
+
+
+def ajuste_estacion(args, V, h, j):
+    """Lecturas validas de la estacion j y su ajuste regularizado (Tikhonov, 2a derivada)."""
     from scipy import ndimage
-
-    n, x, h, V = matriz_equipo(args)
-    valido = V > args.umbral
-    if args.x is not None:
-        j = int(np.argmin(np.abs(x - args.x)))
-    elif args.punto is not None:
-        j = int(np.argmin(np.abs(n - args.punto)))
-    else:
-        j = estacion_auto(V, args.umbral, args.umbral_anomalia)
-    xs = x[j]
-
-    obs = valido[:, j]
+    obs = V[:, j] > args.umbral
     hv, vv = h[obs], V[obs, j]
     if obs.sum() < 4:
-        sys.exit(f"La estacion N = {n[j]:g} tiene menos de 4 lecturas validas (> {args.umbral:g} mV)")
+        sys.exit(f"La estacion tiene menos de 4 lecturas validas (> {args.umbral:g} mV)")
     D = np.diff(np.eye(len(vv)), 2, axis=0)
     sc = vv.max()
-    m = np.linalg.solve(np.eye(len(vv)) + args.lam * D.T @ D, vv / sc) * sc    # ajuste regularizado
+    m = np.linalg.solve(np.eye(len(vv)) + args.lam * D.T @ D, vv / sc) * sc
     suav = ndimage.gaussian_filter1d(vv, args.factor_suavizado, mode="nearest")
     rms = float(np.sqrt(np.mean((m - vv) ** 2)))
+    return hv, vv, m, suav, rms, sc
+
+
+def modelo_resistividad(args, h, hv, m):
+    """Resistividad aproximada (mapeo log-lineal de la EPD ajustada a [rho_min, rho_max]), limites de
+    cada capa y tramos donde la resistividad BAJA respecto a la capa anterior (indices i0..i1)."""
+    from scipy.signal import find_peaks
+    t = np.clip((m - m.min()) / max(m.max() - m.min(), 1e-12), 0, 1)
+    rho = args.rho_min * (args.rho_max / args.rho_min) ** t
+    paso = h[1] - h[0]
+    bordes = np.concatenate([hv - paso / 2, [hv[-1] + paso / 2]])
+    lr = np.log10(rho)
+    mins, _ = find_peaks(-lr, prominence=args.prominencia)
+    maxs, _ = find_peaks(lr)
+    tramos = []
+    for k in mins:
+        previos = maxs[maxs < k]
+        i0 = int(previos[-1]) if len(previos) else max(0, k - 3)     # maximo local anterior
+        i1 = min(len(rho) - 1, k + 3)                                 # unos canales despues del minimo
+        tramos.append((i0, i1))
+    return rho, bordes, tramos
+
+
+def figura_inversion(args):
+    n, x, h, V = matriz_equipo(args)
+    j = elegir_estacion(args, n, x, V)
+    xs = x[j]
+    hv, vv, m, suav, rms, sc = ajuste_estacion(args, V, h, j)
 
     base = os.path.splitext(os.path.basename(args.archivo))[0]
     os.makedirs(args.salida, exist_ok=True)
@@ -469,26 +535,38 @@ def figura_inversion(args):
     terminar(fig, ruta, args, f"(estacion x = {xs:g} m, N = {n[j]:g})")
 
     # --- Modelo de resistividad (aproximado)
-    t = np.clip((m - m.min()) / max(m.max() - m.min(), 1e-12), 0, 1)
-    rho = args.rho_min * (args.rho_max / args.rho_min) ** t
-    paso = h[1] - h[0]
-    bordes = np.concatenate([hv - paso / 2, [hv[-1] + paso / 2]])
+    rho, bordes, tramos = modelo_resistividad(args, h, hv, m)
     fig, ax = plt.subplots(figsize=(5, 7))
     ax.step(np.concatenate([rho, rho[-1:]]), bordes, where="post", color="k", lw=1.8)
-    ext = [0] + [i for i in range(1, len(rho) - 1) if (rho[i] - rho[i - 1]) * (rho[i + 1] - rho[i]) < 0] + [len(rho) - 1]
-    for i in sorted(set(ext)):
-        ax.annotate(f"{rho[i]:.3g}", (rho[i], hv[i]), fontsize=7.5, fontweight="bold",
-                    bbox=dict(boxstyle="square,pad=0.15", fc="#f5e663", ec="k", lw=0.6),
-                    xytext=(3, 0), textcoords="offset points")
+    # Recuadros fucsia: tramos donde la resistividad BAJA respecto a la capa anterior
+    # (caida de al menos --prominencia en log10, p. ej. 0.06 = 15 %)
+    for i0, i1 in tramos:
+        r0, r1 = rho[i0:i1 + 1].min(), rho[i0:i1 + 1].max()
+        ax.add_patch(plt.Rectangle((r0 / 1.15, bordes[i0]), r1 * 1.15 - r0 / 1.15, bordes[i1 + 1] - bordes[i0],
+                                   fill=False, ec=COLOR_RECUADRO, lw=3, zorder=3))
+
+    # Etiquetas de resistividad repartidas por toda la curva: extremos del tramo, maximos y minimos
+    # locales y puntos a profundidades regulares; se descartan las que quedarian encimadas.
+    ext = [i for i in range(1, len(rho) - 1) if (rho[i] - rho[i - 1]) * (rho[i + 1] - rho[i]) < 0]
+    regulares = list(np.unique(np.round(np.linspace(0, len(rho) - 1, max(args.etiquetas, 2))).astype(int)))
+    prioridad = [0, len(rho) - 1] + ext + regulares
+    sep = args.prof / 22                                       # separacion vertical minima entre etiquetas
+    elegidas = []
+    for i in prioridad:
+        if all(abs(hv[i] - hv[q]) >= sep for q in elegidas) and len(elegidas) < max(args.etiquetas, 2) + len(ext) + 2:
+            elegidas.append(i)
+    for i in sorted(elegidas):
+        ax.annotate(f"{rho[i]:.0f}" if rho[i] >= 100 else f"{rho[i]:.3g}", (rho[i], hv[i]), fontsize=7.5,
+                    fontweight="bold", bbox=dict(boxstyle="square,pad=0.15", fc="#f5e663", ec="k", lw=0.6),
+                    xytext=(6, 0), textcoords="offset points", zorder=4)
     ax.set_xscale("log")
+    ax.set_xlim(args.rho_min / 1.6, args.rho_max * 3)           # espacio a la derecha para las etiquetas
     ax.set_ylim(args.prof, 0)
     ax.set_xlabel("Resistividad (ohm·m)")
     ax.set_ylabel("Profundidad (m)")
     ax.set_title(f"Modelo de resistividad (aproximado)\n{etiqueta_csv(args.archivo)}\nx = {xs:g} m (N = {n[j]:g})", fontweight="bold")
     ax.grid(ls=":", alpha=0.5, which="both")
-    fig.text(0.5, 0.005, f"Mapeo empírico de la EPD a {args.rho_min:g}–{args.rho_max:g} ohm·m; no es una inversión física",
-             ha="center", fontsize=7, color="#555")
-    fig.tight_layout(rect=(0, 0.02, 1, 1))
+    fig.tight_layout()
     ruta = os.path.join(args.salida, f"Modelo_Resistividad_{base}.png")
     terminar(fig, ruta, args)
 
@@ -551,6 +629,16 @@ def main():
     b.add_argument("--umbral", type=float, default=0.1,
                    help="descarta lecturas <= umbral (mV) como ruido/canal muerto (def. 0.1); "
                         "evita que dV_min sea ~0 en la ec. 13")
+    b.add_argument("--punto", type=float, default=None, help="N de la estacion marcada (def.: la de mayor anomalia baja)")
+    b.add_argument("--x", type=float, default=None, help="posicion x (m) de la estacion marcada")
+    b.add_argument("--umbral-anomalia", dest="umbral_anomalia", type=float, default=0.15,
+                   help="caida (log10) bajo la mediana lateral para marcar zonas de EPD baja (def. 0.15 = -30%%)")
+    b.add_argument("--min-celdas", dest="min_celdas", type=int, default=4, help="celdas minimas de un recuadro discontinuo (def. 4)")
+    b.add_argument("--lam", type=float, default=3.0, help="regularizacion del ajuste de la estacion (def. 3)")
+    b.add_argument("--factor-suavizado", dest="factor_suavizado", type=float, default=3.0, help=argparse.SUPPRESS)
+    b.add_argument("--rho-min", dest="rho_min", type=float, default=5.0, help="resistividad asignada a la EPD minima (ohm.m)")
+    b.add_argument("--rho-max", dest="rho_max", type=float, default=5000.0, help="resistividad asignada a la EPD maxima (ohm.m)")
+    b.add_argument("--prominencia", type=float, default=0.06, help="caida minima (log10) para marcar un tramo de menor resistividad")
     comun(b)
     b.set_defaults(fn=figura_pseudo)
 
@@ -588,8 +676,11 @@ def main():
     rs.add_argument("--x", type=float, default=None, help="posicion x (m) de la estacion (alternativa a --punto)")
     rs.add_argument("--lam", type=float, default=3.0, help="regularizacion del ajuste (def. 3)")
     rs.add_argument("--factor-suavizado", dest="factor_suavizado", type=float, default=3.0, help="sigma del suavizado (canales)")
-    rs.add_argument("--rho-min", dest="rho_min", type=float, default=5.0, help="resistividad asignada a la EPD minima (ohm.m)")
-    rs.add_argument("--rho-max", dest="rho_max", type=float, default=500.0, help="resistividad asignada a la EPD maxima (ohm.m)")
+    rs.add_argument("--etiquetas", type=int, default=8, help="numero de etiquetas de resistividad repartidas por la curva (def. 8)")
+    rs.add_argument("--prominencia", type=float, default=0.06,
+                    help="caida minima (log10) para marcar con un recuadro un tramo de menor resistividad (def. 0.06 = 15%%)")
+    rs.add_argument("--rho-min", dest="rho_min", type=float, default=5.0, help="resistividad asignada a la EPD minima (ohm.m; def. 5, arcillas lacustres)")
+    rs.add_argument("--rho-max", dest="rho_max", type=float, default=5000.0, help="resistividad asignada a la EPD maxima (ohm.m; def. 5000, rango de Guatemala)")
     rs.set_defaults(fn=figura_inversion)
 
     def completar(a):
@@ -613,16 +704,22 @@ def main():
         if a.mostrar:
             base += ["--mostrar"]
         for c in ("pseudo", "vertical", "horizontal", "inversion"):
-            extra = ["--punto", str(a.punto)] if (a.punto is not None and c in ("vertical", "inversion")) else []
-            if c != "pseudo":                # pseudo no usa la seleccion de estacion
-                extra += ["--umbral-anomalia", str(a.umbral_anomalia)]
+            extra = ["--punto", str(a.punto)] if (a.punto is not None and c in ("pseudo", "vertical", "inversion")) else []
+            extra += ["--umbral-anomalia", str(a.umbral_anomalia)]
+            if c in ("pseudo", "inversion"):
+                extra += ["--lam", str(a.lam), "--rho-min", str(a.rho_min), "--rho-max", str(a.rho_max),
+                          "--prominencia", str(a.prominencia)]
             sa = p.parse_args([c] + base + extra)
             completar(sa)
             sa.fn(sa)
 
     t = sub.add_parser("todas", help="todas las figuras de un archivo del equipo, en su carpeta (figuras/L89_150m)")
     comun_eq(t)
-    t.add_argument("--punto", type=float, default=None, help="N de la estacion para vertical e inversion (def.: la de mayor anomalia baja)")
+    t.add_argument("--punto", type=float, default=None, help="N de la estacion para pseudo, vertical e inversion (def.: la de mayor anomalia baja)")
+    t.add_argument("--lam", type=float, default=3.0, help="regularizacion del ajuste de la estacion (def. 3)")
+    t.add_argument("--rho-min", dest="rho_min", type=float, default=5.0, help="resistividad asignada a la EPD minima (ohm.m)")
+    t.add_argument("--rho-max", dest="rho_max", type=float, default=5000.0, help="resistividad asignada a la EPD maxima (ohm.m)")
+    t.add_argument("--prominencia", type=float, default=0.06, help="caida minima (log10) para marcar un tramo de menor resistividad")
     t.set_defaults(fn=figura_todas)
 
     args = p.parse_args()
